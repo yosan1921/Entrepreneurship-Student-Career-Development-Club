@@ -1,0 +1,431 @@
+/* Leadership Page Styles */
+.leadership-section {
+    padding: 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.leadership-header {
+    text-align: center;
+    margin-bottom: 32px;
+}
+
+.leadership-header h2 {
+    color: #0b4ea2;
+    font-size: 2.5rem;
+    margin-bottom: 16px;
+    font-weight: bold;
+}
+
+.leadership-header p {
+    color: #6c757d;
+    font-size: 1.1rem;
+    max-width: 600px;
+    margin: 0 auto 24px;
+    line-height: 1.6;
+}
+
+.add-leadership-btn {
+    background: linear-gradient(135deg, #0b4ea2, #083b7a);
+    color: white;
+    padding: 14px 28px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(11, 78, 162, 0.3);
+}
+
+.add-leadership-btn:hover {
+    background: linear-gradient(135deg, #083b7a, #062e5f);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(11, 78, 162, 0.4);
+}
+
+.leadership-form-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+}
+
+.leadership-form-card {
+    background: white;
+    padding: 32px;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px) scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.leadership-form-card h3 {
+    color: #0b4ea2;
+    font-size: 1.5rem;
+    margin: 0;
+    font-weight: 600;
+}
+
+.leadership-form-card label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+    color: #495057;
+    font-size: 14px;
+}
+
+.leadership-form-card input,
+.leadership-form-card select,
+.leadership-form-card textarea {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    font-size: 16px;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    box-sizing: border-box;
+}
+
+.leadership-form-card input:focus,
+.leadership-form-card select:focus,
+.leadership-form-card textarea:focus {
+    outline: none;
+    border-color: #0b4ea2;
+    box-shadow: 0 0 0 3px rgba(11, 78, 162, 0.1);
+}
+
+.leadership-form-card button[type="submit"] {
+    background: linear-gradient(135deg, #0b4ea2, #083b7a);
+    color: white;
+    padding: 14px 24px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    flex: 1;
+}
+
+.leadership-form-card button[type="submit"]:hover:not(:disabled) {
+    background: linear-gradient(135deg, #083b7a, #062e5f);
+    transform: translateY(-1px);
+}
+
+.leadership-form-card button[type="submit"]:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.leadership-form-card button[type="button"] {
+    background: #6c757d;
+    color: white;
+    padding: 14px 24px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.3s ease;
+    flex: 1;
+}
+
+.leadership-form-card button[type="button"]:hover {
+    background: #5a6268;
+}
+
+.leadership-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 24px;
+    margin-top: 32px;
+}
+
+.leader-card {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    border: 1px solid #e9ecef;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.leader-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(135deg, #0b4ea2, #083b7a);
+}
+
+.leader-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+.leader-avatar {
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.leader-avatar img {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-right: 16px;
+    border: 3px solid #e9ecef;
+    transition: border-color 0.3s ease;
+}
+
+.leader-card:hover .leader-avatar img {
+    border-color: #0b4ea2;
+}
+
+.avatar-circle {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0b4ea2, #083b7a);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    font-weight: bold;
+    margin-right: 16px;
+    border: 3px solid #e9ecef;
+    transition: all 0.3s ease;
+}
+
+.leader-card:hover .avatar-circle {
+    border-color: #0b4ea2;
+    transform: scale(1.05);
+}
+
+.position-icon {
+    font-size: 28px;
+    margin-left: auto;
+    opacity: 0.8;
+    transition: transform 0.3s ease;
+}
+
+.leader-card:hover .position-icon {
+    transform: scale(1.1);
+}
+
+.leader-name {
+    margin: 0 0 8px 0;
+    color: #0b4ea2;
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.leader-position {
+    margin: 0 0 16px 0;
+    color: #6c757d;
+    font-size: 1rem;
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+.leader-bio {
+    margin: 0 0 20px 0;
+    color: #495057;
+    line-height: 1.6;
+    font-size: 14px;
+}
+
+.leader-contact {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.contact-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+}
+
+.contact-icon {
+    font-size: 16px;
+    width: 20px;
+    text-align: center;
+}
+
+.contact-link {
+    color: #0b4ea2;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    transition: color 0.3s ease;
+}
+
+.contact-link:hover {
+    color: #083b7a;
+    text-decoration: underline;
+}
+
+.leader-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #e9ecef;
+}
+
+.leader-actions button {
+    flex: 1;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    transition: all 0.3s ease;
+}
+
+.leader-actions .edit-btn {
+    background-color: #28a745;
+    color: white;
+}
+
+.leader-actions .edit-btn:hover {
+    background-color: #218838;
+    transform: translateY(-1px);
+}
+
+.leader-actions .delete-btn {
+    background-color: #dc3545;
+    color: white;
+}
+
+.leader-actions .delete-btn:hover {
+    background-color: #c82333;
+    transform: translateY(-1px);
+}
+
+.no-leadership {
+    text-align: center;
+    padding: 60px 24px;
+    color: #6c757d;
+}
+
+.no-items-icon {
+    font-size: 64px;
+    margin-bottom: 20px;
+    opacity: 0.6;
+}
+
+.no-leadership h3 {
+    margin: 0 0 12px 0;
+    font-size: 1.5rem;
+    color: #495057;
+}
+
+.no-leadership p {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.5;
+}
+
+.loading {
+    text-align: center;
+    padding: 40px;
+    color: #6c757d;
+    font-size: 1.1rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .leadership-section {
+        padding: 16px;
+    }
+
+    .leadership-header h2 {
+        font-size: 2rem;
+    }
+
+    .leadership-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+
+    .leader-card {
+        padding: 20px;
+    }
+
+    .leadership-form-card {
+        padding: 24px;
+        margin: 16px;
+        width: calc(100% - 32px);
+    }
+
+    .leader-avatar {
+        flex-direction: column;
+        text-align: center;
+        margin-bottom: 16px;
+    }
+
+    .leader-avatar img,
+    .avatar-circle {
+        margin-right: 0;
+        margin-bottom: 12px;
+    }
+
+    .position-icon {
+        margin-left: 0;
+    }
+}
+
+@media (max-width: 480px) {
+    .leadership-header h2 {
+        font-size: 1.75rem;
+    }
+
+    .leadership-form-card {
+        padding: 20px;
+    }
+
+    .add-leadership-btn {
+        padding: 12px 20px;
+        font-size: 14px;
+    }
+}
