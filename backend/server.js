@@ -73,6 +73,16 @@ app.get('/', (req, res) => {
     });
 });
 
+// API Root route - Added to handle direct /api requests
+app.get('/api', (req, res) => {
+    res.json({
+        success: true,
+        message: 'ESCDC API Root',
+        version: '1.0.0',
+        status: 'Routes are active under /api/ members, events, etc.'
+    });
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
     res.json({
@@ -167,10 +177,12 @@ app.get('/api/test-members-table', async (req, res) => {
 
 // 404 Handler - Catch all other routes
 app.use((req, res) => {
+    const isApiRoute = req.url.startsWith('/api');
     res.status(404).json({
         success: false,
         message: `Cannot ${req.method} ${req.url}`,
-        error: 'Route not found'
+        error: isApiRoute ? 'API Route not found' : 'Page not found',
+        hint: isApiRoute ? 'Check if the endpoint is correctly spelled and prefixed with /api' : 'Try visiting /api for available endpoints'
     });
 });
 
