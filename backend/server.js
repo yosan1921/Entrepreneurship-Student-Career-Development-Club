@@ -8,7 +8,26 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
-app.use(cors());
+const allowedOrigins = [
+    'http://localhost:3000',
+    'https://entrepreneurship-student-career-development.vercel.app', // Update this with your actual Vercel URL
+    /\.vercel\.app$/ // This allows all Vercel preview deployments
+];
+
+app.use(cors({
+    origin: function (origin, callback) {
+        // allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.some(ao => {
+            if (ao instanceof RegExp) return ao.test(origin);
+            return ao === origin;
+        })) {
+            return callback(null, true);
+        }
+        return callback(null, true); // Fallback to true during setup, or refine for security
+    },
+    credentials: true
+}));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
