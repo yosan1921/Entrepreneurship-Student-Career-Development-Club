@@ -29,25 +29,26 @@ const Login = ({ onClose, onSuccess }) => {
 
         if (result.success) {
             setMessage('Login successful! Redirecting...');
+            console.log('🚀 Login successful, starting redirection timer...');
 
             // Determine redirect based on user role
             const userRole = result.user?.role;
             const adminRoles = ['super_admin', 'admin', 'editor'];
 
             setTimeout(() => {
+                console.log('Closing login modal...');
                 // Close modal first to prevent timing issues
                 onClose && onClose();
-                
+
                 // Then redirect admin users to dashboard, others to home
                 setTimeout(() => {
-                    if (adminRoles.includes(userRole)) {
-                        onSuccess && onSuccess(result.user, 'admin'); // Pass 'admin' as target section
-                    } else {
-                        onSuccess && onSuccess(result.user, 'home');
-                    }
+                    const target = adminRoles.includes(userRole) ? 'admin' : 'home';
+                    console.log(`🎯 Redirecting to ${target} section...`);
+                    onSuccess && onSuccess(result.user, target);
                 }, 100); // Small delay to ensure modal is closing
             }, 1000);
         } else {
+            console.warn('❌ Login unsuccessful:', result.message);
             setMessage(result.message);
         }
 

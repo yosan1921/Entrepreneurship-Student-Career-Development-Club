@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../db');
+const { getDB } = require('../db');
+const { ObjectId } = require('mongodb');
 const { verifyToken, requireRole, getCurrentUser } = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
@@ -47,36 +48,31 @@ const upload = multer({
 });
 
 // Get all gallery items (public)
-router.get('/', (req, res) => {
-    const { category, type } = req.query;
-    let query = 'SELECT * FROM gallery WHERE status = "active"';
-    let params = [];
+router.get('/', async (req, res) => {
+    try {
+        const { category, type } = req.query;
+        const db = getDB();
 
-    if (category) {
-        query += ' AND category = ?';
-        params.push(category);
-    }
+        let query = { status: "active" };
 
-    if (type) {
-        query += ' AND mediaType = ?';
-        params.push(type);
-    }
-
-    query += ' ORDER BY eventDate DESC, createdAt DESC';
-
-    db.query(query, params, (err, results) => {
-        if (err) {
-            console.error('Database error:', err);
-            return res.status(500).json({
-                success: false,
-                message: 'Error fetching gallery'
-            });
+        if (category) {
+            query.category = category;
         }
+
+        if (type) {
+            query.mediaType = type;
+        }
+
+        const results = await db.collection('gallery')
+            .find(query)
+            .sort({ eventDate: -1, createdAt: -1 })
+            .toArray();
 
         // Add full URL for media files
         const baseUrl = `${req.protocol}://${req.get('host')}`;
         const galleryWithUrls = results.map(item => ({
             ...item,
+            id: item._id,
             mediaUrl: item.filePath ? `${baseUrl}/uploads/gallery/${path.basename(item.filePath)}` : item.imageUrl,
             thumbnailUrl: item.thumbnailPath ? `${baseUrl}/uploads/gallery/thumbnails/${path.basename(item.thumbnailPath)}` : null
         }));
@@ -85,7 +81,13 @@ router.get('/', (req, res) => {
             success: true,
             gallery: galleryWithUrls
         });
-    });
+    } catch (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error fetching gallery'
+        });
+    }
 });
 
 // Serve uploaded files
@@ -104,27 +106,23 @@ router.get('/files/:filename', (req, res) => {
 });
 
 // Download media file
-router.get('/download/:id', (req, res) => {
-    const { id } = req.params;
-
-    const query = 'SELECT * FROM gallery WHERE id = ? AND status = "active"';
-    db.query(query, [id], (err, results) => {
-        if (err) {
-            console.error('Database error:', err);
-            return res.status(500).json({
-                success: false,
-                message: 'Error fetching gallery item'
-            });
+router.get('/download/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Invalid ID' });
         }
 
-        if (results.length === 0) {
+        const db = getDB();
+        const item = await db.collection('gallery').findOne({ _id: new ObjectId(id), status: "active" });
+
+        if (!item) {
             return res.status(404).json({
                 success: false,
                 message: 'Gallery item not found'
             });
         }
 
-        const item = results[0];
         if (!item.filePath) {
             return res.status(404).json({
                 success: false,
@@ -132,7 +130,6 @@ router.get('/download/:id', (req, res) => {
             });
         }
 
-        // Handle both absolute and relative paths
         const filePath = path.isAbsolute(item.filePath)
             ? item.filePath
             : path.join(__dirname, '..', item.filePath);
@@ -145,18 +142,21 @@ router.get('/download/:id', (req, res) => {
         }
 
         // Increment download count
-        const updateQuery = 'UPDATE gallery SET downloadCount = downloadCount + 1 WHERE id = ?';
-        db.query(updateQuery, [id], (updateErr) => {
-            if (updateErr) {
-                console.error('Error updating download count:', updateErr);
-            }
-        });
+        await db.collection('gallery').updateOne(
+            { _id: new ObjectId(id) },
+            { $inc: { downloadCount: 1 } }
+        );
 
-        // Set appropriate headers for download
         const filename = `${item.title.replace(/[^a-z0-9]/gi, '_')}${path.extname(filePath)}`;
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         res.sendFile(filePath);
-    });
+    } catch (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error fetching gallery item'
+        });
+    }
 });
 
 // Admin routes - require authentication
@@ -164,27 +164,26 @@ router.use(verifyToken);
 router.use(getCurrentUser);
 
 // Get all gallery items for admin (including inactive)
-router.get('/admin', requireRole(['super_admin', 'admin', 'editor']), (req, res) => {
-    const query = `
-    SELECT g.*, au.username as uploadedByName 
-    FROM gallery g 
-    LEFT JOIN admin_users au ON g.uploadedBy = au.id 
-    ORDER BY g.createdAt DESC
-  `;
+router.get('/admin', requireRole(['super_admin', 'admin', 'editor']), async (req, res) => {
+    try {
+        const db = getDB();
+        // Since we don't have SQL joins easily here, we'll fetch all and maybe manually map users if needed
+        // But for simplicity with MongoDB, we often denormalize or do a second lookup
+        const results = await db.collection('gallery')
+            .find({})
+            .sort({ createdAt: -1 })
+            .toArray();
 
-    db.query(query, (err, results) => {
-        if (err) {
-            console.error('Database error:', err);
-            return res.status(500).json({
-                success: false,
-                message: 'Error fetching gallery'
-            });
-        }
+        // Fetch admin users to map names
+        const adminUsers = await db.collection('admin_users').find({}).toArray();
+        const userMap = {};
+        adminUsers.forEach(u => userMap[u._id.toString()] = u.username);
 
-        // Add full URL for media files
         const baseUrl = `${req.protocol}://${req.get('host')}`;
         const galleryWithUrls = results.map(item => ({
             ...item,
+            id: item._id,
+            uploadedByName: userMap[item.uploadedBy?.toString()] || 'Unknown',
             mediaUrl: item.filePath ? `${baseUrl}/uploads/gallery/${path.basename(item.filePath)}` : item.imageUrl,
             thumbnailUrl: item.thumbnailPath ? `${baseUrl}/uploads/gallery/thumbnails/${path.basename(item.thumbnailPath)}` : null
         }));
@@ -193,11 +192,17 @@ router.get('/admin', requireRole(['super_admin', 'admin', 'editor']), (req, res)
             success: true,
             gallery: galleryWithUrls
         });
-    });
+    } catch (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error fetching gallery'
+        });
+    }
 });
 
 // Upload media files
-router.post('/upload', requireRole(['super_admin', 'admin', 'editor']), upload.single('media'), (req, res) => {
+router.post('/upload', requireRole(['super_admin', 'admin', 'editor']), upload.single('media'), async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({
@@ -209,61 +214,44 @@ router.post('/upload', requireRole(['super_admin', 'admin', 'editor']), upload.s
         const { title, description, category, eventDate, status } = req.body;
 
         if (!title) {
-            // Clean up uploaded file if validation fails
-            fs.unlinkSync(req.file.path);
+            if (req.file) fs.unlinkSync(req.file.path);
             return res.status(400).json({
                 success: false,
                 message: 'Title is required'
             });
         }
 
-        // Determine media type
         const mediaType = req.file.mimetype.startsWith('video/') ? 'video' : 'image';
-
-        // Use relative path for database storage
         const relativePath = path.join('uploads', 'gallery', req.file.filename);
+        const db = getDB();
 
-        const query = `
-            INSERT INTO gallery 
-            (title, description, category, eventDate, mediaType, filePath, fileName, fileSize, uploadedBy, status) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `;
-
-        const values = [
+        const newItem = {
             title,
-            description || '',
-            category || 'other',
-            eventDate || null,
+            description: description || '',
+            category: category || 'other',
+            eventDate: eventDate ? new Date(eventDate) : null,
             mediaType,
-            relativePath,
-            req.file.filename,
-            req.file.size,
-            req.user.id,
-            status || 'active'
-        ];
+            filePath: relativePath,
+            fileName: req.file.filename,
+            fileSize: req.file.size,
+            uploadedBy: req.user.id,
+            status: status || 'active',
+            downloadCount: 0,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
 
-        db.query(query, values, (err, result) => {
-            if (err) {
-                console.error('Database error:', err);
-                // Clean up uploaded file if database insert fails
-                fs.unlinkSync(req.file.path);
-                return res.status(500).json({
-                    success: false,
-                    message: 'Error saving gallery item'
-                });
-            }
+        const result = await db.collection('gallery').insertOne(newItem);
 
-            const baseUrl = `${req.protocol}://${req.get('host')}`;
-            res.status(201).json({
-                success: true,
-                message: 'Media uploaded successfully',
-                id: result.insertId,
-                mediaUrl: `${baseUrl}/uploads/gallery/${req.file.filename}`,
-                mediaType: mediaType,
-                fileSize: req.file.size
-            });
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        res.status(201).json({
+            success: true,
+            message: 'Media uploaded successfully',
+            id: result.insertedId,
+            mediaUrl: `${baseUrl}/uploads/gallery/${req.file.filename}`,
+            mediaType: mediaType,
+            fileSize: req.file.size
         });
-
     } catch (error) {
         console.error('Upload error:', error);
         if (req.file) {
@@ -277,88 +265,109 @@ router.post('/upload', requireRole(['super_admin', 'admin', 'editor']), upload.s
 });
 
 // Create new gallery item (URL-based)
-router.post('/', requireRole(['super_admin', 'admin', 'editor']), (req, res) => {
-    const { title, description, imageUrl, category, eventDate, status } = req.body;
+router.post('/', requireRole(['super_admin', 'admin', 'editor']), async (req, res) => {
+    try {
+        const { title, description, imageUrl, category, eventDate, status } = req.body;
 
-    if (!title || !imageUrl) {
-        return res.status(400).json({
-            success: false,
-            message: 'Title and image URL are required'
-        });
-    }
-
-    const query = 'INSERT INTO gallery (title, description, imageUrl, category, eventDate, uploadedBy, status, mediaType) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
-
-    db.query(query, [title, description, imageUrl, category || 'other', eventDate, req.user.id, status || 'active', 'image'], (err, result) => {
-        if (err) {
-            console.error('Database error:', err);
-            return res.status(500).json({
+        if (!title || !imageUrl) {
+            return res.status(400).json({
                 success: false,
-                message: 'Error creating gallery item'
+                message: 'Title and image URL are required'
             });
         }
+
+        const db = getDB();
+        const newItem = {
+            title,
+            description: description || '',
+            imageUrl,
+            category: category || 'other',
+            eventDate: eventDate ? new Date(eventDate) : null,
+            uploadedBy: req.user.id,
+            status: status || 'active',
+            mediaType: 'image',
+            downloadCount: 0,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
+
+        const result = await db.collection('gallery').insertOne(newItem);
 
         res.status(201).json({
             success: true,
             message: 'Gallery item created successfully',
-            id: result.insertId
+            id: result.insertedId
         });
-    });
+    } catch (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error creating gallery item'
+        });
+    }
 });
 
 // Update gallery item
-router.put('/:id', requireRole(['super_admin', 'admin', 'editor']), (req, res) => {
-    const { id } = req.params;
-    const { title, description, imageUrl, category, eventDate, status } = req.body;
+router.put('/:id', requireRole(['super_admin', 'admin', 'editor']), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { title, description, imageUrl, category, eventDate, status } = req.body;
 
-    if (!title) {
-        return res.status(400).json({
-            success: false,
-            message: 'Title is required'
-        });
-    }
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Invalid ID' });
+        }
 
-    // First get the current item to check if it exists
-    const selectQuery = 'SELECT * FROM gallery WHERE id = ?';
-    db.query(selectQuery, [id], (err, results) => {
-        if (err) {
-            console.error('Database error:', err);
-            return res.status(500).json({
+        if (!title) {
+            return res.status(400).json({
                 success: false,
-                message: 'Error fetching gallery item'
+                message: 'Title is required'
             });
         }
 
-        if (results.length === 0) {
+        const db = getDB();
+        const updateData = {
+            title,
+            description,
+            imageUrl,
+            category,
+            eventDate: eventDate ? new Date(eventDate) : null,
+            status,
+            updatedAt: new Date()
+        };
+
+        const result = await db.collection('gallery').updateOne(
+            { _id: new ObjectId(id) },
+            { $set: updateData }
+        );
+
+        if (result.matchedCount === 0) {
             return res.status(404).json({
                 success: false,
                 message: 'Gallery item not found'
             });
         }
 
-        const updateQuery = 'UPDATE gallery SET title = ?, description = ?, imageUrl = ?, category = ?, eventDate = ?, status = ? WHERE id = ?';
-
-        db.query(updateQuery, [title, description, imageUrl, category, eventDate, status, id], (updateErr, result) => {
-            if (updateErr) {
-                console.error('Database error:', updateErr);
-                return res.status(500).json({
-                    success: false,
-                    message: 'Error updating gallery item'
-                });
-            }
-
-            res.json({
-                success: true,
-                message: 'Gallery item updated successfully'
-            });
+        res.json({
+            success: true,
+            message: 'Gallery item updated successfully'
         });
-    });
+    } catch (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error updating gallery item'
+        });
+    }
 });
 
 // Replace media file
-router.put('/:id/replace', requireRole(['super_admin', 'admin', 'editor']), upload.single('media'), (req, res) => {
+router.put('/:id/replace', requireRole(['super_admin', 'admin', 'editor']), upload.single('media'), async (req, res) => {
     try {
         const { id } = req.params;
+        if (!ObjectId.isValid(id)) {
+            if (req.file) fs.unlinkSync(req.file.path);
+            return res.status(400).json({ success: false, message: 'Invalid ID' });
+        }
 
         if (!req.file) {
             return res.status(400).json({
@@ -367,94 +376,60 @@ router.put('/:id/replace', requireRole(['super_admin', 'admin', 'editor']), uplo
             });
         }
 
-        // Get current gallery item
-        const selectQuery = 'SELECT * FROM gallery WHERE id = ?';
-        db.query(selectQuery, [id], (err, results) => {
-            if (err) {
-                console.error('Database error fetching gallery item:', err);
-                if (req.file && fs.existsSync(req.file.path)) {
-                    fs.unlinkSync(req.file.path);
-                }
-                return res.status(500).json({
-                    success: false,
-                    message: 'Error fetching gallery item'
-                });
-            }
+        const db = getDB();
+        const currentItem = await db.collection('gallery').findOne({ _id: new ObjectId(id) });
 
-            if (results.length === 0) {
-                if (req.file && fs.existsSync(req.file.path)) {
-                    fs.unlinkSync(req.file.path);
-                }
-                return res.status(404).json({
-                    success: false,
-                    message: 'Gallery item not found'
-                });
-            }
-
-            const currentItem = results[0];
-            const mediaType = req.file.mimetype.startsWith('video/') ? 'video' : 'image';
-
-            // Use relative path for database storage
-            const relativePath = path.join('uploads', 'gallery', req.file.filename);
-
-            // Update database with new file info
-            const updateQuery = `
-                UPDATE gallery 
-                SET filePath = ?, fileName = ?, fileSize = ?, mediaType = ?, imageUrl = NULL, updatedAt = NOW()
-                WHERE id = ?
-            `;
-
-            const updateValues = [relativePath, req.file.filename, req.file.size, mediaType, id];
-
-            console.log('Updating gallery item:', { id, relativePath, fileName: req.file.filename, fileSize: req.file.size, mediaType });
-
-            db.query(updateQuery, updateValues, (updateErr, updateResult) => {
-                if (updateErr) {
-                    console.error('Database error updating gallery item:', updateErr);
-                    console.error('Update values:', updateValues);
-                    if (req.file && fs.existsSync(req.file.path)) {
-                        fs.unlinkSync(req.file.path);
-                    }
-                    return res.status(500).json({
-                        success: false,
-                        message: 'Error updating gallery item: ' + updateErr.message
-                    });
-                }
-
-                console.log('Update result:', updateResult);
-
-                // Delete old file if it exists
-                if (currentItem.filePath) {
-                    const oldFilePath = path.isAbsolute(currentItem.filePath)
-                        ? currentItem.filePath
-                        : path.join(__dirname, '..', currentItem.filePath);
-
-                    if (fs.existsSync(oldFilePath)) {
-                        try {
-                            fs.unlinkSync(oldFilePath);
-                            console.log('Deleted old file:', oldFilePath);
-                        } catch (deleteErr) {
-                            console.error('Error deleting old file:', deleteErr);
-                        }
-                    }
-                }
-
-                const baseUrl = `${req.protocol}://${req.get('host')}`;
-                res.json({
-                    success: true,
-                    message: 'Media file replaced successfully',
-                    mediaUrl: `${baseUrl}/uploads/gallery/${req.file.filename}`,
-                    mediaType: mediaType,
-                    fileSize: req.file.size
-                });
+        if (!currentItem) {
+            if (req.file) fs.unlinkSync(req.file.path);
+            return res.status(404).json({
+                success: false,
+                message: 'Gallery item not found'
             });
-        });
+        }
 
+        const mediaType = req.file.mimetype.startsWith('video/') ? 'video' : 'image';
+        const relativePath = path.join('uploads', 'gallery', req.file.filename);
+
+        const result = await db.collection('gallery').updateOne(
+            { _id: new ObjectId(id) },
+            {
+                $set: {
+                    filePath: relativePath,
+                    fileName: req.file.filename,
+                    fileSize: req.file.size,
+                    mediaType: mediaType,
+                    imageUrl: null,
+                    updatedAt: new Date()
+                }
+            }
+        );
+
+        // Delete old file if it exists
+        if (currentItem.filePath) {
+            const oldFilePath = path.isAbsolute(currentItem.filePath)
+                ? currentItem.filePath
+                : path.join(__dirname, '..', currentItem.filePath);
+
+            if (fs.existsSync(oldFilePath)) {
+                try {
+                    fs.unlinkSync(oldFilePath);
+                } catch (deleteErr) {
+                    console.error('Error deleting old file:', deleteErr);
+                }
+            }
+        }
+
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        res.json({
+            success: true,
+            message: 'Media file replaced successfully',
+            mediaUrl: `${baseUrl}/uploads/gallery/${req.file.filename}`,
+            mediaType: mediaType,
+            fileSize: req.file.size
+        });
     } catch (error) {
         console.error('Replace error:', error);
-        if (req.file && fs.existsSync(req.file.path)) {
-            fs.unlinkSync(req.file.path);
-        }
+        if (req.file) fs.unlinkSync(req.file.path);
         res.status(500).json({
             success: false,
             message: 'Error replacing file: ' + error.message
@@ -463,117 +438,109 @@ router.put('/:id/replace', requireRole(['super_admin', 'admin', 'editor']), uplo
 });
 
 // Delete gallery item
-router.delete('/:id', requireRole(['super_admin', 'admin']), (req, res) => {
-    const { id } = req.params;
-
-    // First get the item to check for associated files
-    const selectQuery = 'SELECT * FROM gallery WHERE id = ?';
-    db.query(selectQuery, [id], (err, results) => {
-        if (err) {
-            console.error('Database error:', err);
-            return res.status(500).json({
-                success: false,
-                message: 'Error fetching gallery item'
-            });
+router.delete('/:id', requireRole(['super_admin', 'admin']), async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Invalid ID' });
         }
 
-        if (results.length === 0) {
+        const db = getDB();
+        const item = await db.collection('gallery').findOne({ _id: new ObjectId(id) });
+
+        if (!item) {
             return res.status(404).json({
                 success: false,
                 message: 'Gallery item not found'
             });
         }
 
-        const item = results[0];
+        await db.collection('gallery').deleteOne({ _id: new ObjectId(id) });
 
-        // Delete from database
-        const deleteQuery = 'DELETE FROM gallery WHERE id = ?';
-        db.query(deleteQuery, [id], (deleteErr, result) => {
-            if (deleteErr) {
-                console.error('Database error:', deleteErr);
-                return res.status(500).json({
-                    success: false,
-                    message: 'Error deleting gallery item'
-                });
+        // Delete associated files
+        if (item.filePath) {
+            const filePath = path.isAbsolute(item.filePath)
+                ? item.filePath
+                : path.join(__dirname, '..', item.filePath);
+
+            if (fs.existsSync(filePath)) {
+                try { fs.unlinkSync(filePath); } catch (e) { }
             }
+        }
 
-            // Delete associated files
-            if (item.filePath) {
-                const filePath = path.isAbsolute(item.filePath)
-                    ? item.filePath
-                    : path.join(__dirname, '..', item.filePath);
+        if (item.thumbnailPath) {
+            const thumbnailPath = path.isAbsolute(item.thumbnailPath)
+                ? item.thumbnailPath
+                : path.join(__dirname, '..', item.thumbnailPath);
 
-                if (fs.existsSync(filePath)) {
-                    try {
-                        fs.unlinkSync(filePath);
-                    } catch (fileErr) {
-                        console.error('Error deleting file:', fileErr);
-                    }
-                }
+            if (fs.existsSync(thumbnailPath)) {
+                try { fs.unlinkSync(thumbnailPath); } catch (e) { }
             }
+        }
 
-            if (item.thumbnailPath) {
-                const thumbnailPath = path.isAbsolute(item.thumbnailPath)
-                    ? item.thumbnailPath
-                    : path.join(__dirname, '..', item.thumbnailPath);
-
-                if (fs.existsSync(thumbnailPath)) {
-                    try {
-                        fs.unlinkSync(thumbnailPath);
-                    } catch (fileErr) {
-                        console.error('Error deleting thumbnail:', fileErr);
-                    }
-                }
-            }
-
-            res.json({
-                success: true,
-                message: 'Gallery item deleted successfully'
-            });
+        res.json({
+            success: true,
+            message: 'Gallery item deleted successfully'
         });
-    });
+    } catch (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error deleting gallery item'
+        });
+    }
 });
 
 // Get gallery statistics
-router.get('/stats', requireRole(['super_admin', 'admin', 'editor']), (req, res) => {
-    const queries = {
-        total: 'SELECT COUNT(*) as count FROM gallery',
-        active: 'SELECT COUNT(*) as count FROM gallery WHERE status = "active"',
-        images: 'SELECT COUNT(*) as count FROM gallery WHERE mediaType = "image"',
-        videos: 'SELECT COUNT(*) as count FROM gallery WHERE mediaType = "video"',
-        byCategory: 'SELECT category, COUNT(*) as count FROM gallery GROUP BY category',
-        totalSize: 'SELECT SUM(fileSize) as totalSize FROM gallery WHERE filePath IS NOT NULL',
-        totalDownloads: 'SELECT SUM(downloadCount) as count FROM gallery'
-    };
+router.get('/stats', requireRole(['super_admin', 'admin', 'editor']), async (req, res) => {
+    try {
+        const db = getDB();
 
-    const stats = {};
-    let completed = 0;
-    const totalQueries = Object.keys(queries).length;
+        const [
+            total,
+            active,
+            images,
+            videos,
+            byCategory,
+            totalSize,
+            totalDownloads
+        ] = await Promise.all([
+            db.collection('gallery').countDocuments({}),
+            db.collection('gallery').countDocuments({ status: "active" }),
+            db.collection('gallery').countDocuments({ mediaType: "image" }),
+            db.collection('gallery').countDocuments({ mediaType: "video" }),
+            db.collection('gallery').aggregate([
+                { $group: { _id: "$category", count: { $sum: 1 } } }
+            ]).toArray(),
+            db.collection('gallery').aggregate([
+                { $group: { _id: null, totalSize: { $sum: "$fileSize" } } }
+            ]).toArray(),
+            db.collection('gallery').aggregate([
+                { $group: { _id: null, totalDownloads: { $sum: "$downloadCount" } } }
+            ]).toArray()
+        ]);
 
-    Object.entries(queries).forEach(([key, query]) => {
-        db.query(query, (err, results) => {
-            if (err) {
-                console.error(`Error in ${key} query:`, err);
-                stats[key] = key === 'byCategory' ? [] : 0;
-            } else {
-                if (key === 'byCategory') {
-                    stats[key] = results;
-                } else if (key === 'totalSize') {
-                    stats[key] = results[0].totalSize || 0;
-                } else {
-                    stats[key] = results[0].count;
-                }
-            }
+        const stats = {
+            total,
+            active,
+            images,
+            videos,
+            byCategory: byCategory.map(c => ({ category: c._id, count: c.count })),
+            totalSize: totalSize[0]?.totalSize || 0,
+            totalDownloads: totalDownloads[0]?.totalDownloads || 0
+        };
 
-            completed++;
-            if (completed === totalQueries) {
-                res.json({
-                    success: true,
-                    stats: stats
-                });
-            }
+        res.json({
+            success: true,
+            stats: stats
         });
-    });
+    } catch (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error fetching gallery statistics'
+        });
+    }
 });
 
 module.exports = router;

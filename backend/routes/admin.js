@@ -1,7 +1,8 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const router = express.Router();
-const db = require('../db');
+const { getDB } = require('../db');
+const { ObjectId } = require('mongodb');
 const { verifyToken, requireRole, getCurrentUser } = require('../middleware/auth');
 
 // Apply authentication to all admin routes
@@ -9,23 +10,31 @@ router.use(verifyToken);
 router.use(getCurrentUser);
 
 // Get all admin users (Super Admin only)
-router.get('/users', requireRole(['super_admin']), (req, res) => {
-    const query = 'SELECT id, username, email, firstName, lastName, role, status, lastLogin, createdAt FROM admin_users ORDER BY createdAt DESC';
+router.get('/users', requireRole(['super_admin']), async (req, res) => {
+    try {
+        const db = getDB();
+        const users = await db.collection('admin_users')
+            .find({}, { projection: { password: 0, resetToken: 0, resetTokenExpiry: 0 } })
+            .sort({ createdAt: -1 })
+            .toArray();
 
-    db.query(query, (err, results) => {
-        if (err) {
-            console.error('Database error:', err);
-            return res.status(500).json({
-                success: false,
-                message: 'Error fetching admin users'
-            });
-        }
+        // Convert _id to id for compatibility
+        const formattedUsers = users.map(user => ({
+            ...user,
+            id: user._id
+        }));
 
         res.json({
             success: true,
-            users: results
+            users: formattedUsers
         });
-    });
+    } catch (error) {
+        console.error('Error fetching admin users:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching admin users'
+        });
+    }
 });
 
 // Create new admin user (Super Admin only)
@@ -47,55 +56,48 @@ router.post('/users', requireRole(['super_admin']), async (req, res) => {
     }
 
     try {
+        const db = getDB();
+        const usersCollection = db.collection('admin_users');
+
         // Check if username or email already exists
-        const checkQuery = 'SELECT * FROM admin_users WHERE username = ? OR email = ?';
-
-        db.query(checkQuery, [username, email], async (err, results) => {
-            if (err) {
-                console.error('Database error:', err);
-                return res.status(500).json({
-                    success: false,
-                    message: 'Database error'
-                });
-            }
-
-            if (results.length > 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Username or email already exists'
-                });
-            }
-
-            // Hash password
-            const hashedPassword = await bcrypt.hash(password, 10);
-
-            // Insert new user
-            const insertQuery = 'INSERT INTO admin_users (username, email, password, firstName, lastName, role) VALUES (?, ?, ?, ?, ?, ?)';
-
-            db.query(insertQuery, [username, email, hashedPassword, firstName, lastName, role], (err, result) => {
-                if (err) {
-                    console.error('Database error:', err);
-                    return res.status(500).json({
-                        success: false,
-                        message: 'Error creating user'
-                    });
-                }
-
-                res.status(201).json({
-                    success: true,
-                    message: 'Admin user created successfully',
-                    user: {
-                        id: result.insertId,
-                        username,
-                        email,
-                        firstName,
-                        lastName,
-                        role
-                    }
-                });
-            });
+        const existingUser = await usersCollection.findOne({
+            $or: [{ username: username }, { email: email }]
         });
 
+        if (existingUser) {
+            return res.status(400).json({
+                success: false,
+                message: 'Username or email already exists'
+            });
+        }
+
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Insert new user
+        const result = await usersCollection.insertOne({
+            username,
+            email,
+            password: hashedPassword,
+            firstName,
+            lastName,
+            role,
+            status: 'active',
+            createdAt: new Date()
+        });
+
+        res.status(201).json({
+            success: true,
+            message: 'Admin user created successfully',
+            user: {
+                id: result.insertedId,
+                username,
+                email,
+                firstName,
+                lastName,
+                role
+            }
+        });
     } catch (error) {
         console.error('Error creating admin user:', error);
         res.status(500).json({
@@ -106,7 +108,7 @@ router.post('/users', requireRole(['super_admin']), async (req, res) => {
 });
 
 // Update admin user (Super Admin only)
-router.put('/users/:id', requireRole(['super_admin']), (req, res) => {
+router.put('/users/:id', requireRole(['super_admin']), async (req, res) => {
     const { id } = req.params;
     const { username, email, firstName, lastName, role, status } = req.body;
 
@@ -132,25 +134,31 @@ router.put('/users/:id', requireRole(['super_admin']), (req, res) => {
     }
 
     // Prevent super admin from changing their own role/status
-    if (parseInt(id) === req.user.id && (role !== 'super_admin' || status !== 'active')) {
+    if (id === req.user.id && (role !== 'super_admin' || status !== 'active')) {
         return res.status(400).json({
             success: false,
             message: 'Cannot change your own role or deactivate your account'
         });
     }
 
-    const updateQuery = 'UPDATE admin_users SET username = ?, email = ?, firstName = ?, lastName = ?, role = ?, status = ? WHERE id = ?';
+    try {
+        const db = getDB();
+        const result = await db.collection('admin_users').updateOne(
+            { _id: new ObjectId(id) },
+            {
+                $set: {
+                    username,
+                    email,
+                    firstName,
+                    lastName,
+                    role,
+                    status,
+                    updatedAt: new Date()
+                }
+            }
+        );
 
-    db.query(updateQuery, [username, email, firstName, lastName, role, status, id], (err, result) => {
-        if (err) {
-            console.error('Database error:', err);
-            return res.status(500).json({
-                success: false,
-                message: 'Error updating user'
-            });
-        }
-
-        if (result.affectedRows === 0) {
+        if (result.matchedCount === 0) {
             return res.status(404).json({
                 success: false,
                 message: 'User not found'
@@ -161,33 +169,32 @@ router.put('/users/:id', requireRole(['super_admin']), (req, res) => {
             success: true,
             message: 'User updated successfully'
         });
-    });
+    } catch (error) {
+        console.error('Error updating user:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error updating user'
+        });
+    }
 });
 
 // Delete admin user (Super Admin only)
-router.delete('/users/:id', requireRole(['super_admin']), (req, res) => {
+router.delete('/users/:id', requireRole(['super_admin']), async (req, res) => {
     const { id } = req.params;
 
     // Prevent super admin from deleting themselves
-    if (parseInt(id) === req.user.id) {
+    if (id === req.user.id) {
         return res.status(400).json({
             success: false,
             message: 'Cannot delete your own account'
         });
     }
 
-    const deleteQuery = 'DELETE FROM admin_users WHERE id = ?';
+    try {
+        const db = getDB();
+        const result = await db.collection('admin_users').deleteOne({ _id: new ObjectId(id) });
 
-    db.query(deleteQuery, [id], (err, result) => {
-        if (err) {
-            console.error('Database error:', err);
-            return res.status(500).json({
-                success: false,
-                message: 'Error deleting user'
-            });
-        }
-
-        if (result.affectedRows === 0) {
+        if (result.deletedCount === 0) {
             return res.status(404).json({
                 success: false,
                 message: 'User not found'
@@ -198,65 +205,94 @@ router.delete('/users/:id', requireRole(['super_admin']), (req, res) => {
             success: true,
             message: 'User deleted successfully'
         });
-    });
+    } catch (error) {
+        console.error('Error deleting user:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error deleting user'
+        });
+    }
 });
 
 // Get dashboard statistics (Admin and above)
-router.get('/dashboard', requireRole(['super_admin', 'admin', 'editor']), (req, res) => {
-    const queries = {
-        totalMembers: 'SELECT COUNT(*) as count FROM members WHERE status = "active"',
-        newMembers: 'SELECT COUNT(*) as count FROM members WHERE status = "active" AND registeredAt >= DATE_SUB(NOW(), INTERVAL 30 DAY)',
-        totalEvents: 'SELECT COUNT(*) as count FROM events',
-        upcomingEvents: 'SELECT COUNT(*) as count FROM events WHERE status = "upcoming" AND date >= NOW()',
-        completedEvents: 'SELECT COUNT(*) as count FROM events WHERE status = "completed"',
-        newContacts: 'SELECT COUNT(*) as count FROM contacts WHERE status = "new"',
-        totalContacts: 'SELECT COUNT(*) as count FROM contacts',
-        totalLeadership: 'SELECT COUNT(*) as count FROM leadership WHERE status = "active"',
-        totalGallery: 'SELECT COUNT(*) as count FROM gallery WHERE status = "active"',
-        totalResources: 'SELECT COUNT(*) as count FROM resources WHERE status = "active"',
-        resourceDownloads: 'SELECT SUM(downloadCount) as count FROM resources WHERE status = "active"'
-    };
+router.get('/dashboard', requireRole(['super_admin', 'admin', 'editor']), async (req, res) => {
+    try {
+        const db = getDB();
 
-    const results = {};
-    let completed = 0;
-    const total = Object.keys(queries).length;
+        // Get counts from collections
+        const [
+            totalMembers,
+            newMembers,
+            totalEvents,
+            upcomingEvents,
+            completedEvents,
+            newContacts,
+            totalContacts,
+            totalLeadership,
+            totalGallery,
+            totalResources,
+            resourceDownloads
+        ] = await Promise.all([
+            db.collection('members').countDocuments({ status: "active" }),
+            db.collection('members').countDocuments({
+                status: "active",
+                registeredAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+            }),
+            db.collection('events').countDocuments({}),
+            db.collection('events').countDocuments({ status: "upcoming", date: { $gte: new Date() } }),
+            db.collection('events').countDocuments({ status: "completed" }),
+            db.collection('contacts').countDocuments({ status: "new" }),
+            db.collection('contacts').countDocuments({}),
+            db.collection('leadership').countDocuments({ status: "active" }),
+            db.collection('gallery').countDocuments({ status: "active" }),
+            db.collection('resources').countDocuments({ status: "active" }),
+            db.collection('resources').aggregate([
+                { $match: { status: "active" } },
+                { $group: { _id: null, total: { $sum: "$downloadCount" } } }
+            ]).toArray()
+        ]);
 
-    Object.entries(queries).forEach(([key, query]) => {
-        db.query(query, (err, result) => {
-            if (err) {
-                console.error(`Error in ${key} query:`, err);
-                results[key] = 0;
-            } else {
-                results[key] = result[0].count || 0;
-            }
+        const stats = {
+            totalMembers,
+            newMembers,
+            totalEvents,
+            upcomingEvents,
+            completedEvents,
+            newContacts,
+            totalContacts,
+            totalLeadership,
+            totalGallery,
+            totalResources,
+            resourceDownloads: resourceDownloads[0]?.total || 0
+        };
 
-            completed++;
-            if (completed === total) {
-                // Get recent activities
-                const recentActivitiesQuery = `
-                    (SELECT 'member' as type, fullName as title, registeredAt as date FROM members ORDER BY registeredAt DESC LIMIT 3)
-                    UNION ALL
-                    (SELECT 'contact' as type, CONCAT(name, ' - ', subject) as title, submittedAt as date FROM contacts ORDER BY submittedAt DESC LIMIT 3)
-                    UNION ALL
-                    (SELECT 'event' as type, title, createdAt as date FROM events ORDER BY createdAt DESC LIMIT 3)
-                    ORDER BY date DESC LIMIT 10
-                `;
+        // Get recent activities
+        // Note: MongoDB doesn't have UNION ALL like SQL, so we'll fetch separately and merge
+        const [recentMembers, recentContacts, recentEvents] = await Promise.all([
+            db.collection('members').find({}).sort({ registeredAt: -1 }).limit(3).toArray(),
+            db.collection('contacts').find({}).sort({ submittedAt: -1 }).limit(3).toArray(),
+            db.collection('events').find({}).sort({ createdAt: -1 }).limit(3).toArray()
+        ]);
 
-                db.query(recentActivitiesQuery, (err, activities) => {
-                    if (err) {
-                        console.error('Error fetching recent activities:', err);
-                        activities = [];
-                    }
+        const activities = [
+            ...recentMembers.map(m => ({ type: 'member', title: m.fullName, date: m.registeredAt })),
+            ...recentContacts.map(c => ({ type: 'contact', title: `${c.name} - ${c.subject}`, date: c.submittedAt })),
+            ...recentEvents.map(e => ({ type: 'event', title: e.title, date: e.createdAt }))
+        ].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
 
-                    res.json({
-                        success: true,
-                        stats: results,
-                        recentActivities: activities
-                    });
-                });
-            }
+        res.json({
+            success: true,
+            stats,
+            recentActivities: activities
         });
-    });
+
+    } catch (error) {
+        console.error('Dashboard Error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching dashboard data'
+        });
+    }
 });
 
 module.exports = router;

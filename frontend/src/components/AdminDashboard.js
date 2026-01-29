@@ -18,7 +18,12 @@ const AdminDashboard = () => {
     const [dashboardData, setDashboardData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [sidebarOpen, setSidebarOpen] = useState(true);
-    const { user, hasRole } = useAuth();
+    const { user, hasRole, logout } = useAuth();
+
+    const handleLogout = () => {
+        logout();
+        window.location.href = '/';
+    };
 
     useEffect(() => {
         fetchDashboardData();
@@ -115,25 +120,37 @@ const AdminDashboard = () => {
                             </div>
                         </div>
 
-                        {/* User Info */}
-                        <div className="flex items-center gap-3">
-                            <div className="hidden sm:block text-right">
-                                <div className="text-sm font-semibold text-gray-900">
-                                    {user?.firstName} {user?.lastName}
-                                </div>
-                                <div className={`text-xs font-medium px-2 py-0.5 rounded-full inline-block ${user?.role === 'super_admin' ? 'bg-purple-100 text-purple-700' :
+                        {/* User Info & Logout */}
+                        <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-3">
+                                <div className="hidden sm:block text-right border-r border-gray-200 pr-4">
+                                    <div className="text-sm font-semibold text-gray-900">
+                                        {user?.firstName} {user?.lastName}
+                                    </div>
+                                    <div className={`text-xs font-medium px-2 py-0.5 rounded-full inline-block ${user?.role === 'super_admin' ? 'bg-purple-100 text-purple-700' :
                                         user?.role === 'admin' ? 'bg-blue-100 text-blue-700' :
                                             'bg-green-100 text-green-700'
-                                    }`}>
-                                    {user?.role?.replace('_', ' ').toUpperCase()}
+                                        }`}>
+                                        {user?.role?.replace('_', ' ').toUpperCase()}
+                                    </div>
                                 </div>
-                            </div>
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg ${user?.role === 'super_admin' ? 'bg-gradient-to-br from-purple-500 to-purple-600' :
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg ${user?.role === 'super_admin' ? 'bg-gradient-to-br from-purple-500 to-purple-600' :
                                     user?.role === 'admin' ? 'bg-gradient-to-br from-blue-500 to-blue-600' :
                                         'bg-gradient-to-br from-green-500 to-green-600'
-                                }`}>
-                                {user?.firstName?.charAt(0)}{user?.lastName?.charAt(0)}
+                                    }`}>
+                                    {user?.firstName?.charAt(0)}{user?.lastName?.charAt(0)}
+                                </div>
                             </div>
+                            <button
+                                onClick={handleLogout}
+                                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Logout"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                </svg>
+                                <span className="hidden sm:inline">Logout</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -155,8 +172,8 @@ const AdminDashboard = () => {
                                         }
                                     }}
                                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${activeTab === item.id
-                                            ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-200'
-                                            : 'text-gray-700 hover:bg-gray-100'
+                                        ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-200'
+                                        : 'text-gray-700 hover:bg-gray-100'
                                         }`}
                                 >
                                     <span className="text-xl">{item.icon}</span>

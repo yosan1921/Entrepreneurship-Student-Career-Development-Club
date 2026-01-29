@@ -3,7 +3,8 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const router = express.Router();
-const db = require('../db');
+const { getDB } = require('../db');
+const { ObjectId } = require('mongodb');
 const { verifyToken, requireRole, getCurrentUser } = require('../middleware/auth');
 
 // Configure multer for file uploads
@@ -33,98 +34,98 @@ const upload = multer({
 // ================== PUBLIC ROUTES ==================
 
 // Get all active resources (public)
-router.get('/', (req, res) => {
-    console.log('📚 GET /api/resources called');
+router.get('/', async (req, res) => {
+    try {
+        console.log('📚 GET /api/resources called');
+        const { category, type, search, featured, limit = 50, offset = 0 } = req.query;
+        const db = getDB();
 
-    const { category, type, search, featured, limit = 50, offset = 0 } = req.query;
+        let query = { status: 'Active' };
 
-    let query = `
-        SELECT r.*, COALESCE(rc.name, 'Uncategorized') as category_name
-        FROM resources r
-        LEFT JOIN resource_categories rc ON r.category_id = rc.id
-        WHERE r.status = 'Active'
-    `;
-
-    const params = [];
-
-    if (category) {
-        query += ' AND rc.name = ?';
-        params.push(category);
-    }
-
-    if (type) {
-        query += ' AND r.type = ?';
-        params.push(type);
-    }
-
-    if (search) {
-        query += ' AND (r.title LIKE ? OR r.description LIKE ?)';
-        params.push(`%${search}%`, `%${search}%`);
-    }
-
-    if (featured === 'true') {
-        query += ' AND r.featured = 1';
-    }
-
-    query += ' ORDER BY r.pinned DESC, r.featured DESC, r.uploaded_at DESC';
-    query += ' LIMIT ? OFFSET ?';
-    params.push(parseInt(limit), parseInt(offset));
-
-    console.log('📚 Executing query:', query);
-    console.log('📚 With params:', params);
-
-    db.query(query, params, (err, results) => {
-        if (err) {
-            console.error('❌ Database error in GET /api/resources:', err);
-            return res.status(500).json({
-                success: false,
-                message: 'Error fetching resources',
-                error: err.message
-            });
+        if (type) {
+            query.type = type;
         }
+
+        if (search) {
+            query.$or = [
+                { title: { $regex: search, $options: 'i' } },
+                { description: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        if (featured === 'true') {
+            query.featured = { $in: [1, true] };
+        }
+
+        // Handle category if provided (look up category_id first)
+        if (category) {
+            const cat = await db.collection('resource_categories').findOne({ name: category });
+            if (cat) {
+                query.category_id = cat._id.toString();
+            } else {
+                // If category not found, return empty results
+                return res.json({ success: true, resources: [], total: 0 });
+            }
+        }
+
+        const results = await db.collection('resources')
+            .find(query)
+            .sort({ pinned: -1, featured: -1, uploaded_at: -1 })
+            .skip(parseInt(offset))
+            .limit(parseInt(limit))
+            .toArray();
+
+        // Fetch categories to map names
+        const categories = await db.collection('resource_categories').find({}).toArray();
+        const catMap = {};
+        categories.forEach(c => catMap[c._id.toString()] = c.name);
+
+        const resourcesWithCat = results.map(r => ({
+            ...r,
+            id: r._id,
+            category_name: catMap[r.category_id] || 'Uncategorized'
+        }));
 
         console.log(`✅ GET /api/resources successful: ${results.length} resources found`);
 
         res.json({
             success: true,
-            resources: results,
-            total: results.length
+            resources: resourcesWithCat,
+            total: resourcesWithCat.length
         });
-    });
+    } catch (err) {
+        console.error('❌ Database error in GET /api/resources:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error fetching resources',
+            error: err.message
+        });
+    }
 });
 
 // Get categories
-router.get('/categories', (req, res) => {
-    console.log('📂 GET /api/resources/categories/all called');
-
-    const query = 'SELECT * FROM resource_categories ORDER BY name';
-
-    console.log('📂 Executing query:', query);
-
-    db.query(query, (err, results) => {
-        if (err) {
-            console.error('❌ Database error in GET /api/resources/categories/all:', err);
-            return res.status(500).json({
-                success: false,
-                message: 'Error fetching categories',
-                error: err.message
-            });
-        }
-
-        console.log(`✅ GET /api/resources/categories/all successful: ${results.length} categories found`);
+router.get('/categories', async (req, res) => {
+    try {
+        console.log('📂 GET /api/resources/categories called');
+        const db = getDB();
+        const results = await db.collection('resource_categories').find({}).sort({ name: 1 }).toArray();
 
         res.json({
             success: true,
-            categories: results
+            categories: results.map(c => ({ ...c, id: c._id }))
         });
-    });
+    } catch (err) {
+        console.error('❌ Database error in GET /api/resources/categories:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error fetching categories',
+            error: err.message
+        });
+    }
 });
 
-// Get tags (placeholder - table doesn't exist yet)
+// Get tags
 router.get('/tags', (req, res) => {
-    console.log('🏷️ GET /api/resources/tags called');
-
-    // Return empty array since resource_tags table doesn't exist yet
     res.json({
         success: true,
         tags: []
@@ -133,648 +134,323 @@ router.get('/tags', (req, res) => {
 
 // Debug endpoint to check table structure
 router.get('/debug/table', (req, res) => {
-    console.log('🔍 GET /api/resources/debug/table called');
-
-    const query = 'DESCRIBE resources';
-    db.query(query, (err, results) => {
-        if (err) {
-            console.error('❌ Error describing table:', err);
-            return res.status(500).json({
-                success: false,
-                message: 'Error checking table structure',
-                error: err.message
-            });
-        }
-
-        console.log('📋 Resources table structure:', results);
-        res.json({
-            success: true,
-            structure: results
-        });
+    res.json({
+        success: true,
+        message: 'MongoDB uses collections, not tables with fixed structures.'
     });
 });
 
-// Create resource (public endpoint for testing)
-router.post('/', upload.single('file'), (req, res) => {
-    console.log('📝 POST /api/resources called');
-    console.log('📝 Request body:', req.body);
-    console.log('📝 File:', req.file);
-    console.log('📝 Content-Type:', req.headers['content-type']);
+// Create resource (public endpoint for testing - deprecated/migrated to use MongoDB)
+router.post('/', upload.single('file'), async (req, res) => {
+    try {
+        console.log('📝 POST /api/resources called');
+        const { title, description, category_id, file_url, type, featured, pinned, status } = req.body;
 
-    const { title, description, category_id, file_url, type, featured, pinned, status } = req.body;
-
-    // Validate required fields
-    if (!title || title.trim() === '') {
-        console.log('❌ Validation failed: Title is required');
-        return res.status(400).json({
-            success: false,
-            message: 'Title is required'
-        });
-    }
-
-    // First, let's check if the resources table exists
-    const checkTableQuery = 'SHOW TABLES LIKE "resources"';
-    db.query(checkTableQuery, (err, results) => {
-        if (err) {
-            console.error('❌ Error checking table existence:', err);
-            return res.status(500).json({
-                success: false,
-                message: 'Database error checking table',
-                error: err.message
-            });
+        if (!title || title.trim() === '') {
+            return res.status(400).json({ success: false, message: 'Title is required' });
         }
 
-        if (results.length === 0) {
-            console.log('❌ Resources table does not exist');
-            return res.status(500).json({
-                success: false,
-                message: 'Resources table does not exist. Please run database setup.'
-            });
-        }
-
-        // Determine resource type and file path
-        let resourceType = type || 'link'; // Default to 'link' if no type specified
-        let filePath = null;
+        let resourceType = type || 'link';
+        let filePath = '';
 
         if (req.file) {
-            // File was uploaded
             resourceType = 'file';
             filePath = req.file.filename;
-            console.log('📁 File uploaded:', filePath);
         } else if (file_url && file_url.trim() !== '') {
-            // URL was provided
             resourceType = 'link';
             filePath = file_url.trim();
-            console.log('🔗 URL provided:', filePath);
-        } else if (type === 'file') {
-            // Explicitly requested file type but no file uploaded
-            console.log('❌ Validation failed: File required for file type');
-            return res.status(400).json({
-                success: false,
-                message: 'File is required for file-type resources'
-            });
-        } else {
-            // No file or URL provided, use empty string instead of null
-            filePath = '';
-            console.log('📝 No file or URL provided, using empty string');
         }
 
-        const resourceData = {
+        const db = getDB();
+        const newItem = {
             title: title.trim(),
             description: description ? description.trim() : '',
-            category_id: category_id ? parseInt(category_id) : null,
+            category_id: category_id || null,
             type: resourceType,
             file_path: filePath,
             status: status || 'Active',
             featured: featured === 'true' || featured === true ? 1 : 0,
             pinned: pinned === 'true' || pinned === true ? 1 : 0,
-            created_by: null // No auth for testing
+            uploaded_at: new Date(),
+            download_count: 0,
+            created_by: null
         };
 
-        console.log('📝 Resource data to insert:', resourceData);
-
-        // Use a simpler insert query to avoid column issues
-        const query = `
-            INSERT INTO resources (title, description, type, file_path, status, featured, pinned)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `;
-
-        const params = [
-            resourceData.title,
-            resourceData.description,
-            resourceData.type,
-            resourceData.file_path,
-            resourceData.status,
-            resourceData.featured,
-            resourceData.pinned
-        ];
-
-        console.log('📝 Executing insert query:', query);
-        console.log('📝 With params:', params);
-
-        db.query(query, params, (err, result) => {
-            if (err) {
-                console.error('❌ Database error in POST /api/resources:', err);
-                console.error('❌ SQL State:', err.sqlState);
-                console.error('❌ Error Code:', err.code);
-                return res.status(500).json({
-                    success: false,
-                    message: 'Error creating resource',
-                    error: err.message,
-                    sqlState: err.sqlState,
-                    code: err.code
-                });
-            }
-
-            console.log('✅ Resource created successfully with ID:', result.insertId);
-
-            res.json({
-                success: true,
-                message: 'Resource created successfully',
-                resource: {
-                    id: result.insertId,
-                    ...resourceData
-                }
-            });
-        });
-    });
-});
-
-// ================== ADMIN ROUTES ==================
-
-// Apply authentication to admin routes (temporarily disabled for testing)
-// router.use('/admin/*', verifyToken);
-// router.use('/admin/*', getCurrentUser);
-// router.use('/admin/*', requireRole(['super_admin', 'admin', 'editor']));
-
-// Get all resources (admin)
-router.get('/admin', (req, res) => {
-    console.log('🔧 GET /api/resources/admin/all called');
-
-    const { category, status, search, limit = 100, offset = 0 } = req.query;
-
-    let query = `
-        SELECT r.*, 
-               COALESCE(rc.name, 'Uncategorized') as category_name,
-               COALESCE(CONCAT(au_created.firstName, ' ', au_created.lastName), 'System') as created_by_name,
-               COALESCE(CONCAT(au_updated.firstName, ' ', au_updated.lastName), 'System') as updated_by_name
-        FROM resources r
-        LEFT JOIN resource_categories rc ON r.category_id = rc.id
-        LEFT JOIN admin_users au_created ON r.created_by = au_created.id
-        LEFT JOIN admin_users au_updated ON r.updated_by = au_updated.id
-        WHERE 1=1
-    `;
-
-    const params = [];
-
-    if (category) {
-        query += ' AND rc.name = ?';
-        params.push(category);
-    }
-
-    if (status) {
-        query += ' AND r.status = ?';
-        params.push(status);
-    }
-
-    if (search) {
-        query += ' AND (r.title LIKE ? OR r.description LIKE ?)';
-        params.push(`%${search}%`, `%${search}%`);
-    }
-
-    query += ' ORDER BY r.pinned DESC, r.featured DESC, r.uploaded_at DESC';
-    query += ' LIMIT ? OFFSET ?';
-    params.push(parseInt(limit), parseInt(offset));
-
-    console.log('🔧 Executing query:', query);
-    console.log('🔧 With params:', params);
-
-    db.query(query, params, (err, results) => {
-        if (err) {
-            console.error('❌ Database error in GET /api/resources/admin/all:', err);
-            return res.status(500).json({
-                success: false,
-                message: 'Error fetching resources',
-                error: err.message
-            });
-        }
-
-        console.log(`✅ GET /api/resources/admin/all successful: ${results.length} resources found`);
-
-        // Get total count
-        let countQuery = 'SELECT COUNT(*) as total FROM resources r LEFT JOIN resource_categories rc ON r.category_id = rc.id WHERE 1=1';
-        const countParams = [];
-
-        if (category) {
-            countQuery += ' AND rc.name = ?';
-            countParams.push(category);
-        }
-
-        if (status) {
-            countQuery += ' AND r.status = ?';
-            countParams.push(status);
-        }
-
-        if (search) {
-            countQuery += ' AND (r.title LIKE ? OR r.description LIKE ?)';
-            countParams.push(`%${search}%`, `%${search}%`);
-        }
-
-        db.query(countQuery, countParams, (countErr, countResults) => {
-            if (countErr) {
-                console.error('❌ Error getting count:', countErr);
-                return res.status(500).json({
-                    success: false,
-                    message: 'Error getting resource count'
-                });
-            }
-
-            res.json({
-                success: true,
-                resources: results,
-                total: countResults[0].total,
-                pagination: {
-                    limit: parseInt(limit),
-                    offset: parseInt(offset),
-                    hasMore: (parseInt(offset) + results.length) < countResults[0].total
-                }
-            });
-        });
-    });
-});
-
-// Create resource
-router.post('/admin', upload.single('file'), (req, res) => {
-    console.log('📝 POST /api/resources/admin called');
-    console.log('📝 Request body:', req.body);
-    console.log('📝 File:', req.file);
-    console.log('📝 Content-Type:', req.headers['content-type']);
-
-    const { title, description, category_id, file_url, type, featured, pinned, status } = req.body;
-
-    // Validate required fields
-    if (!title || title.trim() === '') {
-        console.log('❌ Validation failed: Title is required');
-        return res.status(400).json({
-            success: false,
-            message: 'Title is required'
-        });
-    }
-
-    // Determine resource type and file path
-    let resourceType = type || 'link'; // Default to 'link' if no type specified
-    let filePath = null;
-
-    if (req.file) {
-        // File was uploaded
-        resourceType = 'file';
-        filePath = req.file.filename;
-        console.log('📁 File uploaded:', filePath);
-    } else if (file_url && file_url.trim() !== '') {
-        // URL was provided
-        resourceType = 'link';
-        filePath = file_url.trim();
-        console.log('🔗 URL provided:', filePath);
-    } else if (type === 'file') {
-        // Explicitly requested file type but no file uploaded
-        console.log('❌ Validation failed: File required for file type');
-        return res.status(400).json({
-            success: false,
-            message: 'File is required for file-type resources'
-        });
-    } else {
-        // No file or URL provided, use empty string instead of null
-        filePath = '';
-        console.log('📝 No file or URL provided, using empty string');
-    }
-
-    const resourceData = {
-        title: title.trim(),
-        description: description ? description.trim() : '',
-        category_id: category_id ? parseInt(category_id) : null,
-        type: resourceType,
-        file_path: filePath,
-        status: status || 'Active',
-        featured: featured === 'true' || featured === true ? 1 : 0,
-        pinned: pinned === 'true' || pinned === true ? 1 : 0,
-        created_by: req.user ? req.user.id : null
-    };
-
-    console.log('📝 Resource data to insert:', resourceData);
-
-    const query = `
-        INSERT INTO resources (title, description, category_id, type, file_path, status, featured, pinned, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    const params = [
-        resourceData.title,
-        resourceData.description,
-        resourceData.category_id,
-        resourceData.type,
-        resourceData.file_path,
-        resourceData.status,
-        resourceData.featured,
-        resourceData.pinned,
-        resourceData.created_by
-    ];
-
-    console.log('📝 Executing insert query:', query);
-    console.log('📝 With params:', params);
-
-    db.query(query, params, (err, result) => {
-        if (err) {
-            console.error('❌ Database error in POST /api/resources/admin:', err);
-            return res.status(500).json({
-                success: false,
-                message: 'Error creating resource',
-                error: err.message
-            });
-        }
-
-        console.log('✅ Resource created successfully with ID:', result.insertId);
+        const result = await db.collection('resources').insertOne(newItem);
 
         res.json({
             success: true,
             message: 'Resource created successfully',
-            resource: {
-                id: result.insertId,
-                ...resourceData
+            resource: { id: result.insertedId, ...newItem }
+        });
+    } catch (err) {
+        console.error('❌ Error in POST /api/resources:', err);
+        return res.status(500).json({ success: false, message: 'Error creating resource', error: err.message });
+    }
+});
+
+// ================== ADMIN ROUTES ==================
+
+// Get all resources (admin)
+router.get('/admin', verifyToken, async (req, res) => {
+    try {
+        console.log('🔧 GET /api/resources/admin called');
+        const { category, status, search, limit = 100, offset = 0 } = req.query;
+        const db = getDB();
+
+        let query = {};
+
+        if (status) {
+            query.status = status;
+        }
+
+        if (search) {
+            query.$or = [
+                { title: { $regex: search, $options: 'i' } },
+                { description: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        if (category) {
+            const cat = await db.collection('resource_categories').findOne({ name: category });
+            if (cat) {
+                query.category_id = cat._id.toString();
+            } else {
+                return res.json({ success: true, resources: [], total: 0 });
+            }
+        }
+
+        const results = await db.collection('resources')
+            .find(query)
+            .sort({ pinned: -1, featured: -1, uploaded_at: -1 })
+            .skip(parseInt(offset))
+            .limit(parseInt(limit))
+            .toArray();
+
+        // Fetch related data
+        const categories = await db.collection('resource_categories').find({}).toArray();
+        const catMap = {};
+        categories.forEach(c => catMap[c._id.toString()] = c.name);
+
+        const adminUsers = await db.collection('admin_users').find({}).toArray();
+        const userMap = {};
+        adminUsers.forEach(u => userMap[u._id.toString()] = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.username);
+
+        const resourcesProcessed = results.map(r => ({
+            ...r,
+            id: r._id,
+            category_name: catMap[r.category_id] || 'Uncategorized',
+            created_by_name: userMap[r.created_by?.toString()] || 'System',
+            updated_by_name: userMap[r.updated_by?.toString()] || 'System'
+        }));
+
+        const total = await db.collection('resources').countDocuments(query);
+
+        res.json({
+            success: true,
+            resources: resourcesProcessed,
+            total,
+            pagination: {
+                limit: parseInt(limit),
+                offset: parseInt(offset),
+                hasMore: (parseInt(offset) + results.length) < total
             }
         });
-    });
+    } catch (err) {
+        console.error('❌ Error in GET /api/resources/admin:', err);
+        return res.status(500).json({ success: false, message: 'Error fetching resources', error: err.message });
+    }
+});
+
+// Create resource (admin)
+router.post('/admin', verifyToken, upload.single('file'), async (req, res) => {
+    try {
+        console.log('📝 POST /api/resources/admin called');
+        const { title, description, category_id, file_url, type, featured, pinned, status } = req.body;
+
+        if (!title || title.trim() === '') {
+            return res.status(400).json({ success: false, message: 'Title is required' });
+        }
+
+        let resourceType = type || 'link';
+        let filePath = '';
+
+        if (req.file) {
+            resourceType = 'file';
+            filePath = req.file.filename;
+        } else if (file_url && file_url.trim() !== '') {
+            resourceType = 'link';
+            filePath = file_url.trim();
+        }
+
+        const db = getDB();
+        const newItem = {
+            title: title.trim(),
+            description: description ? description.trim() : '',
+            category_id: category_id || null,
+            type: resourceType,
+            file_path: filePath,
+            status: status || 'Active',
+            featured: featured === 'true' || featured === true ? 1 : 0,
+            pinned: pinned === 'true' || pinned === true ? 1 : 0,
+            uploaded_at: new Date(),
+            download_count: 0,
+            created_by: req.user ? req.user.id : null
+        };
+
+        const result = await db.collection('resources').insertOne(newItem);
+
+        res.json({
+            success: true,
+            message: 'Resource created successfully',
+            resource: { id: result.insertedId, ...newItem }
+        });
+    } catch (err) {
+        console.error('❌ Error in POST /api/resources/admin:', err);
+        return res.status(500).json({ success: false, message: 'Error creating resource', error: err.message });
+    }
 });
 
 // Delete resource
-router.delete('/:id', (req, res) => {
-    console.log('🗑️ DELETE /api/resources/:id called');
-
-    const resourceId = req.params.id;
-    console.log('🗑️ Resource ID:', resourceId);
-
-    if (!resourceId) {
-        return res.status(400).json({
-            success: false,
-            message: 'Resource ID is required'
-        });
-    }
-
-    // First get the resource to check if it has a file to delete
-    const selectQuery = 'SELECT * FROM resources WHERE id = ?';
-
-    db.query(selectQuery, [resourceId], (err, results) => {
-        if (err) {
-            console.error('❌ Database error in DELETE /api/resources/:id (select):', err);
-            return res.status(500).json({
-                success: false,
-                message: 'Error fetching resource',
-                error: err.message
-            });
+router.delete('/:id', verifyToken, async (req, res) => {
+    try {
+        console.log('🗑️ DELETE /api/resources/:id called');
+        const resourceId = req.params.id;
+        if (!ObjectId.isValid(resourceId)) {
+            return res.status(400).json({ success: false, message: 'Invalid ID' });
         }
 
-        if (results.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Resource not found'
-            });
+        const db = getDB();
+        const resource = await db.collection('resources').findOne({ _id: new ObjectId(resourceId) });
+
+        if (!resource) {
+            return res.status(404).json({ success: false, message: 'Resource not found' });
         }
 
-        const resource = results[0];
+        await db.collection('resources').deleteOne({ _id: new ObjectId(resourceId) });
 
-        // Delete the database record
-        const deleteQuery = 'DELETE FROM resources WHERE id = ?';
-
-        db.query(deleteQuery, [resourceId], (deleteErr, deleteResult) => {
-            if (deleteErr) {
-                console.error('❌ Database error in DELETE /api/resources/:id (delete):', deleteErr);
-                return res.status(500).json({
-                    success: false,
-                    message: 'Error deleting resource',
-                    error: deleteErr.message
-                });
-            }
-
-            if (deleteResult.affectedRows === 0) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Resource not found'
-                });
-            }
-
-            // If it's a file resource, try to delete the physical file
-            if (resource.type === 'file' && resource.file_path) {
-                const fs = require('fs');
-                const path = require('path');
-                const filePath = path.join(__dirname, '../uploads/resources', resource.file_path);
-
-                try {
-                    if (fs.existsSync(filePath)) {
-                        fs.unlinkSync(filePath);
-                        console.log('🗑️ Physical file deleted:', filePath);
-                    }
-                } catch (fileErr) {
-                    console.error('⚠️ Warning: Could not delete physical file:', fileErr.message);
-                    // Don't fail the request if file deletion fails
+        // Physical file deletion
+        if (resource.type === 'file' && resource.file_path) {
+            const filePath = path.join(__dirname, '../uploads/resources', resource.file_path);
+            if (fs.existsSync(filePath)) {
+                try { fs.unlinkSync(filePath); } catch (e) {
+                    console.error('⚠️ Warning: Could not delete physical file:', e.message);
                 }
             }
-
-            console.log('✅ Resource deleted successfully');
-
-            res.json({
-                success: true,
-                message: 'Resource deleted successfully'
-            });
-        });
-    });
-});
-
-// Get categories for admin (same as public but with different endpoint)
-router.get('/admin/categories', (req, res) => {
-    console.log('📂 GET /api/resources/admin/categories called');
-
-    const query = 'SELECT * FROM resource_categories ORDER BY name';
-
-    db.query(query, (err, results) => {
-        if (err) {
-            console.error('❌ Database error in GET /api/resources/admin/categories:', err);
-            return res.status(500).json({
-                success: false,
-                message: 'Error fetching categories',
-                error: err.message
-            });
         }
 
-        console.log(`✅ GET /api/resources/admin/categories successful: ${results.length} categories found`);
+        res.json({ success: true, message: 'Resource deleted successfully' });
+    } catch (err) {
+        console.error('❌ Error in DELETE /api/resources/:id:', err);
+        return res.status(500).json({ success: false, message: 'Error deleting resource', error: err.message });
+    }
+});
 
-        res.json({
-            success: true,
-            categories: results
-        });
-    });
+// Get categories for admin
+router.get('/admin/categories', verifyToken, async (req, res) => {
+    try {
+        const db = getDB();
+        const results = await db.collection('resource_categories').find({}).sort({ name: 1 }).toArray();
+        res.json({ success: true, categories: results.map(c => ({ ...c, id: c._id })) });
+    } catch (err) {
+        console.error('❌ Error in GET /api/resources/admin/categories:', err);
+        return res.status(500).json({ success: false, message: 'Error fetching categories' });
+    }
 });
 
 // Get stats endpoint
-router.get('/stats', (req, res) => {
-    console.log('📊 GET /api/resources/stats called');
-
-    const statsQuery = `
-        SELECT 
-            COUNT(*) as total_resources,
-            COUNT(CASE WHEN status = 'Active' THEN 1 END) as active_resources,
-            COUNT(CASE WHEN featured = 1 THEN 1 END) as featured_resources,
-            SUM(COALESCE(download_count, 0)) as total_downloads,
-            COUNT(CASE WHEN type = 'file' THEN 1 END) as file_resources,
-            COUNT(CASE WHEN type = 'link' THEN 1 END) as link_resources
-        FROM resources
-    `;
-
-    console.log('📊 Executing stats query:', statsQuery);
-
-    db.query(statsQuery, (err, results) => {
-        if (err) {
-            console.error('❌ Database error in GET /api/resources/stats:', err);
-            return res.status(500).json({
-                success: false,
-                message: 'Error fetching stats',
-                error: err.message
-            });
-        }
-
-        console.log('✅ Stats retrieved:', results[0]);
+router.get('/stats', verifyToken, async (req, res) => {
+    try {
+        const db = getDB();
+        const [
+            total_resources,
+            active_resources,
+            featured_resources,
+            total_downloads,
+            file_resources,
+            link_resources
+        ] = await Promise.all([
+            db.collection('resources').countDocuments({}),
+            db.collection('resources').countDocuments({ status: 'Active' }),
+            db.collection('resources').countDocuments({ featured: { $in: [1, true] } }),
+            db.collection('resources').aggregate([{ $group: { _id: null, total: { $sum: "$download_count" } } }]).toArray(),
+            db.collection('resources').countDocuments({ type: 'file' }),
+            db.collection('resources').countDocuments({ type: 'link' })
+        ]);
 
         res.json({
             success: true,
-            stats: results[0] || {
-                total_resources: 0,
-                active_resources: 0,
-                featured_resources: 0,
-                total_downloads: 0,
-                file_resources: 0,
-                link_resources: 0
+            stats: {
+                total_resources,
+                active_resources,
+                featured_resources,
+                total_downloads: total_downloads[0]?.total || 0,
+                file_resources,
+                link_resources
             }
         });
-    });
-});
-
-// Download resource file (GET method)
-router.get('/:id/download', (req, res) => {
-    console.log('📥 GET /api/resources/:id/download called');
-    handleResourceDownload(req, res);
-});
-
-// Download resource file (POST method for frontend compatibility)
-router.post('/:id/download', (req, res) => {
-    console.log('📥 POST /api/resources/:id/download called');
-    handleResourceDownload(req, res);
+    } catch (err) {
+        console.error('❌ Error in GET /api/resources/stats:', err);
+        return res.status(500).json({ success: false, message: 'Error fetching stats' });
+    }
 });
 
 // Shared download handler function
-function handleResourceDownload(req, res) {
-    const resourceId = req.params.id;
-    console.log('📥 Resource ID:', resourceId);
-
-    if (!resourceId) {
-        return res.status(400).json({
-            success: false,
-            message: 'Resource ID is required'
-        });
-    }
-
-    const query = 'SELECT * FROM resources WHERE id = ? AND status = "Active"';
-
-    db.query(query, [resourceId], (err, results) => {
-        if (err) {
-            console.error('❌ Database error in download:', err);
-            return res.status(500).json({
-                success: false,
-                message: 'Database error',
-                error: err.message
-            });
+async function handleResourceDownload(req, res) {
+    try {
+        const resourceId = req.params.id;
+        if (!ObjectId.isValid(resourceId)) {
+            return res.status(400).json({ success: false, message: 'Invalid ID' });
         }
 
-        if (results.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Resource not found'
-            });
+        const db = getDB();
+        const resource = await db.collection('resources').findOne({ _id: new ObjectId(resourceId), status: "Active" });
+
+        if (!resource) {
+            return res.status(404).json({ success: false, message: 'Resource not found' });
         }
 
-        const resource = results[0];
-        console.log('📥 Resource found:', resource.title, 'Type:', resource.type);
-
-        // Handle different resource types
         if (resource.type === 'link') {
-            // For link resources, return the URL
-            return res.json({
-                success: true,
-                message: 'Link resource',
-                downloadUrl: resource.file_path,
-                type: 'link'
-            });
+            return res.json({ success: true, message: 'Link resource', downloadUrl: resource.file_path, type: 'link' });
         }
 
-        if (resource.type !== 'file') {
-            return res.status(400).json({
-                success: false,
-                message: 'Resource is not downloadable'
-            });
+        if (resource.type !== 'file' || !resource.file_path) {
+            return res.status(400).json({ success: false, message: 'Resource is not downloadable' });
         }
 
-        if (!resource.file_path) {
-            return res.status(400).json({
-                success: false,
-                message: 'No file path available'
-            });
-        }
-
-        const fs = require('fs');
-        const path = require('path');
         const fullPath = path.join(__dirname, '../uploads/resources', resource.file_path);
 
-        console.log('📥 Looking for file at:', fullPath);
-
-        // Check if file exists
         if (!fs.existsSync(fullPath)) {
-            console.error('❌ File not found at:', fullPath);
-            return res.status(404).json({
-                success: false,
-                message: 'File not found on server'
-            });
+            return res.status(404).json({ success: false, message: 'File not found on server' });
         }
 
-        try {
-            // Get file stats
-            const stats = fs.statSync(fullPath);
-
-            if (!stats.isFile()) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Path does not point to a valid file'
-                });
-            }
-
-            // Update download count
-            const updateQuery = 'UPDATE resources SET download_count = COALESCE(download_count, 0) + 1 WHERE id = ?';
-            db.query(updateQuery, [resourceId], (updateErr) => {
-                if (updateErr) {
-                    console.error('⚠️ Error updating download count:', updateErr);
-                }
-            });
-
-            // Set proper headers for download
-            const fileName = resource.file_name || resource.file_path;
-            res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-            res.setHeader('Content-Type', resource.file_type || 'application/octet-stream');
-            res.setHeader('Content-Length', stats.size);
-
-            console.log('📥 Starting file download:', fileName);
-
-            // Stream the file
-            const fileStream = fs.createReadStream(fullPath);
-            fileStream.pipe(res);
-
-            fileStream.on('error', (streamError) => {
-                console.error('❌ File stream error:', streamError);
-                if (!res.headersSent) {
-                    res.status(500).json({
-                        success: false,
-                        message: 'Error streaming file'
-                    });
-                }
-            });
-
-            fileStream.on('end', () => {
-                console.log('✅ File download completed:', fileName);
-            });
-
-        } catch (statError) {
-            console.error('❌ File stat error:', statError);
-            return res.status(500).json({
-                success: false,
-                message: 'Error accessing file'
-            });
+        const stats = fs.statSync(fullPath);
+        if (!stats.isFile()) {
+            return res.status(400).json({ success: false, message: 'Path does not point to a valid file' });
         }
-    });
+
+        // Update download count
+        await db.collection('resources').updateOne(
+            { _id: new ObjectId(resourceId) },
+            { $inc: { download_count: 1 } }
+        );
+
+        const fileName = resource.file_name || resource.file_path;
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        res.setHeader('Content-Type', resource.file_type || 'application/octet-stream');
+        res.setHeader('Content-Length', stats.size);
+
+        fs.createReadStream(fullPath).pipe(res);
+    } catch (err) {
+        console.error('❌ Error in download handler:', err);
+        if (!res.headersSent) {
+            res.status(500).json({ success: false, message: 'Error processing download' });
+        }
+    }
 }
+
+// Download resource file
+router.get('/:id/download', handleResourceDownload);
+router.post('/:id/download', handleResourceDownload);
 
 module.exports = router;

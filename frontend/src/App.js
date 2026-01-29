@@ -20,18 +20,28 @@ import Footer from './components/Footer';
 // Protected sections that require login
 const PROTECTED_SECTIONS = ['events', 'gallery', 'event-gallery', 'resources', 'contact', 'announcements', 'admin'];
 
-function AppContent() {
+const AppContent = () => {
     const [activeSection, setActiveSection] = useState('home');
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, loading } = useAuth();
 
     // Redirect to home if user tries to access protected section without login
     useEffect(() => {
-        if (!isAuthenticated && PROTECTED_SECTIONS.includes(activeSection)) {
+        // Only run redirect logic if we are not in loading state
+        if (!loading && !isAuthenticated && PROTECTED_SECTIONS.includes(activeSection)) {
+            console.log(`🛡️ Access denied to ${activeSection}. Redirecting home...`);
             setActiveSection('home');
         }
-    }, [isAuthenticated, activeSection]);
+    }, [isAuthenticated, activeSection, loading]);
 
     const renderSection = () => {
+        if (loading) {
+            return (
+                <div className="flex items-center justify-center min-h-[60vh]">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                </div>
+            );
+        }
+
         // Check if section is protected and user is not authenticated
         if (PROTECTED_SECTIONS.includes(activeSection) && !isAuthenticated) {
             return (

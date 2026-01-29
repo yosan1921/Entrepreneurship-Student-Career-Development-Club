@@ -1,125 +1,42 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../db');
-
-// Function to ensure news table exists
-const ensureNewsTable = () => {
-    return new Promise((resolve, reject) => {
-        // Check if table exists first
-        const checkTableQuery = `
-            SELECT COUNT(*) as tableExists 
-            FROM information_schema.tables 
-            WHERE table_schema = DATABASE() AND table_name = 'news'
-        `;
-
-        db.query(checkTableQuery, (err, results) => {
-            if (err) {
-                console.error('Error checking news table:', err);
-                reject(err);
-                return;
-            }
-
-            const tableExists = results[0].tableExists > 0;
-            if (tableExists) {
-                console.log('✅ News table exists');
-                resolve();
-                return;
-            }
-
-            console.log('📋 Creating news table...');
-            // Create table if it doesn't exist
-            const createTableSQL = `
-                CREATE TABLE news (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    title VARCHAR(255) NOT NULL,
-                    content TEXT NOT NULL,
-                    category VARCHAR(100) DEFAULT 'General',
-                    status ENUM('published', 'draft') DEFAULT 'published',
-                    publishDate DATE,
-                    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                    
-                    INDEX idx_status (status),
-                    INDEX idx_category (category),
-                    INDEX idx_publishDate (publishDate)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-            `;
-
-            db.query(createTableSQL, (err) => {
-                if (err) {
-                    console.error('Error creating news table:', err);
-                    reject(err);
-                } else {
-                    console.log('✅ News table created successfully');
-
-                    // Insert sample data
-                    const sampleData = [
-                        ['Welcome to ESCDC', 'We are excited to announce the launch of our new website and management system.', 'Announcements', 'published', '2025-01-04'],
-                        ['Upcoming Events', 'Check out our exciting lineup of workshops and seminars for this semester.', 'Events', 'published', '2025-01-04'],
-                        ['New Partnership', 'We have partnered with leading tech companies to provide better opportunities.', 'General', 'published', '2025-01-03']
-                    ];
-
-                    const insertQuery = 'INSERT INTO news (title, content, category, status, publishDate) VALUES ?';
-
-                    db.query(insertQuery, [sampleData], (insertErr) => {
-                        if (insertErr) {
-                            console.error('Error inserting sample news:', insertErr);
-                        } else {
-                            console.log('✅ Sample news inserted');
-                        }
-                        resolve();
-                    });
-                }
-            });
-        });
-    });
-};
+const { getDB } = require('../db');
+const { ObjectId } = require('mongodb');
 
 // Get all news (public)
 router.get('/', async (req, res) => {
     console.log('📰 GET /api/news called');
 
     try {
-        await ensureNewsTable();
-
+        const db = getDB();
         const { category, status = 'published', limit = 50, offset = 0 } = req.query;
-        let query = 'SELECT * FROM news WHERE status = ?';
-        let params = [status];
+
+        const query = { status };
 
         if (category) {
-            query += ' AND category = ?';
-            params.push(category);
+            query.category = category;
         }
 
-        query += ' ORDER BY publishDate DESC, createdAt DESC LIMIT ? OFFSET ?';
-        params.push(parseInt(limit), parseInt(offset));
+        const newsCollection = db.collection('news');
+        const results = await newsCollection
+            .find(query)
+            .sort({ publishDate: -1, createdAt: -1 })
+            .limit(parseInt(limit))
+            .skip(parseInt(offset))
+            .toArray();
 
-        console.log('📰 Query:', query);
-        console.log('📰 Params:', params);
+        console.log(`✅ News found: ${results.length}`);
 
-        db.query(query, params, (err, results) => {
-            if (err) {
-                console.error('News DB Error:', err);
-                return res.status(500).json({
-                    success: false,
-                    message: 'Error fetching news',
-                    error: err.message
-                });
-            }
-
-            console.log(`✅ News found: ${results.length}`);
-
-            res.json({
-                success: true,
-                count: results.length,
-                news: results
-            });
+        res.json({
+            success: true,
+            count: results.length,
+            news: results.map(n => ({ ...n, id: n._id }))
         });
     } catch (error) {
-        console.error('News table initialization error:', error);
+        console.error('News fetch error:', error);
         res.status(500).json({
             success: false,
-            message: 'Database initialization error: ' + error.message
+            message: 'Error fetching news: ' + error.message
         });
     }
 });
@@ -129,52 +46,64 @@ router.get('/admin', async (req, res) => {
     console.log('📰 GET /api/news/admin called');
 
     try {
-        await ensureNewsTable();
-
+        const db = getDB();
         const { category, status, limit = 50, offset = 0 } = req.query;
-        let query = 'SELECT * FROM news WHERE 1=1';
-        let params = [];
+
+        let query = {};
 
         if (category) {
-            query += ' AND category = ?';
-            params.push(category);
+            query.category = category;
         }
 
         if (status) {
-            query += ' AND status = ?';
-            params.push(status);
+            query.status = status;
         }
 
-        query += ' ORDER BY createdAt DESC LIMIT ? OFFSET ?';
-        params.push(parseInt(limit), parseInt(offset));
+        const newsCollection = db.collection('news');
+        const results = await newsCollection
+            .find(query)
+            .sort({ createdAt: -1 })
+            .limit(parseInt(limit))
+            .skip(parseInt(offset))
+            .toArray();
 
-        console.log('📰 Admin Query:', query);
-        console.log('📰 Admin Params:', params);
+        console.log(`✅ Admin news found: ${results.length}`);
 
-        db.query(query, params, (err, results) => {
-            if (err) {
-                console.error('Admin News DB Error:', err);
-                return res.status(500).json({
-                    success: false,
-                    message: 'Error fetching news',
-                    error: err.message
-                });
-            }
-
-            console.log(`✅ Admin news found: ${results.length}`);
-
-            res.json({
-                success: true,
-                count: results.length,
-                news: results
-            });
+        res.json({
+            success: true,
+            count: results.length,
+            news: results.map(n => ({ ...n, id: n._id }))
         });
     } catch (error) {
-        console.error('Admin news table initialization error:', error);
+        console.error('Admin news fetch error:', error);
         res.status(500).json({
             success: false,
-            message: 'Database initialization error: ' + error.message
+            message: 'Error fetching news: ' + error.message
         });
+    }
+});
+
+// Get single news item
+router.get('/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Invalid news ID' });
+        }
+
+        const db = getDB();
+        const news = await db.collection('news').findOne({ _id: new ObjectId(id) });
+
+        if (!news) {
+            return res.status(404).json({ success: false, message: 'News not found' });
+        }
+
+        res.json({
+            success: true,
+            news: { ...news, id: news._id }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
@@ -183,8 +112,6 @@ router.post('/', async (req, res) => {
     console.log('📰 POST /api/news called');
 
     try {
-        await ensureNewsTable();
-
         const { title, content, category, status, publishDate } = req.body;
 
         if (!title || !content) {
@@ -194,41 +121,30 @@ router.post('/', async (req, res) => {
             });
         }
 
-        const query = 'INSERT INTO news (title, content, category, status, publishDate) VALUES (?, ?, ?, ?, ?)';
-        const params = [
+        const db = getDB();
+        const newNews = {
             title,
             content,
-            category || 'General',
-            status || 'published',
-            publishDate || new Date().toISOString().split('T')[0]
-        ];
+            category: category || 'General',
+            status: status || 'published',
+            publishDate: publishDate || new Date().toISOString().split('T')[0],
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
 
-        console.log('📰 Create Query:', query);
-        console.log('📰 Create Params:', params);
+        const result = await db.collection('news').insertOne(newNews);
+        console.log('✅ News created with ID:', result.insertedId);
 
-        db.query(query, params, (err, result) => {
-            if (err) {
-                console.error('Create News DB Error:', err);
-                return res.status(500).json({
-                    success: false,
-                    message: 'Error creating news',
-                    error: err.message
-                });
-            }
-
-            console.log('✅ News created with ID:', result.insertId);
-
-            res.status(201).json({
-                success: true,
-                message: 'News created successfully',
-                id: result.insertId
-            });
+        res.status(201).json({
+            success: true,
+            message: 'News created successfully',
+            id: result.insertedId
         });
     } catch (error) {
-        console.error('Create news table initialization error:', error);
+        console.error('Create news error:', error);
         res.status(500).json({
             success: false,
-            message: 'Database initialization error: ' + error.message
+            message: 'Error creating news: ' + error.message
         });
     }
 });
@@ -238,10 +154,15 @@ router.put('/:id', async (req, res) => {
     console.log('📰 PUT /api/news/:id called');
 
     try {
-        await ensureNewsTable();
-
         const { id } = req.params;
         const { title, content, category, status, publishDate } = req.body;
+
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid news ID'
+            });
+        }
 
         if (!title || !content) {
             return res.status(400).json({
@@ -250,41 +171,39 @@ router.put('/:id', async (req, res) => {
             });
         }
 
-        const query = 'UPDATE news SET title = ?, content = ?, category = ?, status = ?, publishDate = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?';
-        const params = [title, content, category, status, publishDate, id];
+        const db = getDB();
+        const updateData = {
+            title,
+            content,
+            category,
+            status,
+            publishDate,
+            updatedAt: new Date()
+        };
 
-        console.log('📰 Update Query:', query);
-        console.log('📰 Update Params:', params);
+        const result = await db.collection('news').updateOne(
+            { _id: new ObjectId(id) },
+            { $set: updateData }
+        );
 
-        db.query(query, params, (err, result) => {
-            if (err) {
-                console.error('Update News DB Error:', err);
-                return res.status(500).json({
-                    success: false,
-                    message: 'Error updating news',
-                    error: err.message
-                });
-            }
-
-            if (result.affectedRows === 0) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'News not found'
-                });
-            }
-
-            console.log('✅ News updated, affected rows:', result.affectedRows);
-
-            res.json({
-                success: true,
-                message: 'News updated successfully'
+        if (result.matchedCount === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'News not found'
             });
+        }
+
+        console.log('✅ News updated');
+
+        res.json({
+            success: true,
+            message: 'News updated successfully'
         });
     } catch (error) {
-        console.error('Update news table initialization error:', error);
+        console.error('Update news error:', error);
         res.status(500).json({
             success: false,
-            message: 'Database initialization error: ' + error.message
+            message: 'Error updating news: ' + error.message
         });
     }
 });
@@ -294,44 +213,40 @@ router.delete('/:id', async (req, res) => {
     console.log('📰 DELETE /api/news/:id called');
 
     try {
-        await ensureNewsTable();
-
         const { id } = req.params;
-        const query = 'DELETE FROM news WHERE id = ?';
 
-        console.log('📰 Delete Query:', query, 'ID:', id);
-
-        db.query(query, [id], (err, result) => {
-            if (err) {
-                console.error('Delete News DB Error:', err);
-                return res.status(500).json({
-                    success: false,
-                    message: 'Error deleting news',
-                    error: err.message
-                });
-            }
-
-            if (result.affectedRows === 0) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'News not found'
-                });
-            }
-
-            console.log('✅ News deleted, affected rows:', result.affectedRows);
-
-            res.json({
-                success: true,
-                message: 'News deleted successfully'
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid news ID'
             });
+        }
+
+        const db = getDB();
+        const result = await db.collection('news').deleteOne({ _id: new ObjectId(id) });
+
+        if (result.deletedCount === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'News not found'
+            });
+        }
+
+        console.log('✅ News deleted');
+
+        res.json({
+            success: true,
+            message: 'News deleted successfully'
         });
     } catch (error) {
-        console.error('Delete news table initialization error:', error);
+        console.error('Delete news error:', error);
         res.status(500).json({
             success: false,
-            message: 'Database initialization error: ' + error.message
+            message: 'Error deleting news: ' + error.message
         });
     }
 });
+
+module.exports = router;
 
 module.exports = router;

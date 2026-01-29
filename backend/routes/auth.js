@@ -76,6 +76,10 @@ router.post('/login', async (req, res) => {
             { $set: { lastLogin: new Date() } }
         );
 
+        if (!process.env.JWT_SECRET) {
+            console.error('❌ [AuthRoute] JWT_SECRET is not defined in environment during token signing!');
+        }
+
         // Generate JWT token
         const token = jwt.sign(
             {

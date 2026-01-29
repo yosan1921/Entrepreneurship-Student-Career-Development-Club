@@ -63,6 +63,7 @@ app.use('/api/announcement-comments', require('./routes/announcement-comments'))
 app.use('/api/announcement-likes', require('./routes/announcement-likes'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/system-settings', require('./routes/system-settings'));
+app.use('/api/categories', require('./routes/categories'));
 
 // Root route
 app.get('/', (req, res) => {

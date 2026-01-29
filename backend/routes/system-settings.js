@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../db');
+const { getDB } = require('../db');
 const { verifyToken, requireRole, getCurrentUser } = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
@@ -43,17 +43,12 @@ const upload = multer({
 });
 
 // Public endpoint to get public settings
-router.get('/public', (req, res) => {
-    const query = 'SELECT setting_key, setting_value, setting_type FROM system_settings WHERE is_public = TRUE';
-
-    db.query(query, (err, results) => {
-        if (err) {
-            console.error('Database error:', err);
-            return res.status(500).json({
-                success: false,
-                message: 'Error fetching public settings'
-            });
-        }
+router.get('/public', async (req, res) => {
+    try {
+        const db = getDB();
+        const results = await db.collection('system_settings')
+            .find({ is_public: true })
+            .toArray();
 
         const settings = {};
         results.forEach(setting => {
@@ -62,16 +57,18 @@ router.get('/public', (req, res) => {
             // Parse based on type
             switch (setting.setting_type) {
                 case 'boolean':
-                    value = value === 'true';
+                    value = value === 'true' || value === true;
                     break;
                 case 'number':
                     value = parseFloat(value);
                     break;
                 case 'json':
-                    try {
-                        value = JSON.parse(value);
-                    } catch (e) {
-                        console.error('Error parsing JSON setting:', setting.setting_key);
+                    if (typeof value === 'string') {
+                        try {
+                            value = JSON.parse(value);
+                        } catch (e) {
+                            console.error('Error parsing JSON setting:', setting.setting_key);
+                        }
                     }
                     break;
             }
@@ -83,7 +80,13 @@ router.get('/public', (req, res) => {
             success: true,
             data: settings
         });
-    });
+    } catch (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error fetching public settings'
+        });
+    }
 });
 
 // Admin routes - require authentication
@@ -91,28 +94,20 @@ router.use(verifyToken);
 router.use(getCurrentUser);
 
 // Get all system settings (admin only)
-router.get('/all', requireRole(['super_admin', 'admin']), (req, res) => {
-    const { category } = req.query;
+router.get('/all', requireRole(['super_admin', 'admin']), async (req, res) => {
+    try {
+        const { category } = req.query;
+        const db = getDB();
 
-    let query = 'SELECT * FROM system_settings';
-    let params = [];
-
-    if (category) {
-        query += ' WHERE category = ?';
-        params.push(category);
-    }
-
-    query += ' ORDER BY category, setting_key';
-
-    db.query(query, params, (err, results) => {
-        if (err) {
-            console.error('Database error:', err);
-            return res.status(500).json({
-                success: false,
-                message: 'Error fetching settings'
-            });
+        let query = {};
+        if (category) {
+            query.category = category;
         }
 
+        const results = await db.collection('system_settings')
+            .find(query)
+            .sort({ category: 1, setting_key: 1 })
+            .toArray();
         // Parse values based on type
         const settings = results.map(setting => ({
             ...setting,
@@ -123,80 +118,81 @@ router.get('/all', requireRole(['super_admin', 'admin']), (req, res) => {
             success: true,
             data: settings
         });
-    });
+    } catch (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error fetching settings'
+        });
+    }
 });
 
 // Get feature flags
-router.get('/features', requireRole(['super_admin', 'admin']), (req, res) => {
-    const { category } = req.query;
+router.get('/features', requireRole(['super_admin', 'admin']), async (req, res) => {
+    try {
+        const { category } = req.query;
+        const db = getDB();
 
-    let query = 'SELECT * FROM feature_flags';
-    let params = [];
-
-    if (category) {
-        query += ' WHERE category = ?';
-        params.push(category);
-    }
-
-    query += ' ORDER BY category, feature_name';
-
-    db.query(query, params, (err, results) => {
-        if (err) {
-            console.error('Database error:', err);
-            return res.status(500).json({
-                success: false,
-                message: 'Error fetching feature flags'
-            });
+        let query = {};
+        if (category) {
+            query.category = category;
         }
+
+        const results = await db.collection('feature_flags')
+            .find(query)
+            .sort({ category: 1, feature_name: 1 })
+            .toArray();
 
         res.json({
             success: true,
             data: results
         });
-    });
+    } catch (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error fetching feature flags'
+        });
+    }
 });
 
 // Update system setting
-router.put('/setting/:key', requireRole(['super_admin', 'admin']), (req, res) => {
-    const { key } = req.params;
-    const { value, description } = req.body;
+router.put('/setting/:key', requireRole(['super_admin', 'admin']), async (req, res) => {
+    try {
+        const { key } = req.params;
+        const { value, description } = req.body;
 
-    if (value === undefined) {
-        return res.status(400).json({
-            success: false,
-            message: 'Setting value is required'
-        });
-    }
-
-    // Convert value to string for storage
-    let stringValue = value;
-    if (typeof value === 'object') {
-        stringValue = JSON.stringify(value);
-    } else if (typeof value === 'boolean') {
-        stringValue = value.toString();
-    }
-
-    let query = 'UPDATE system_settings SET setting_value = ?, updated_at = NOW()';
-    let params = [stringValue];
-
-    if (description) {
-        query += ', description = ?';
-        params.push(description);
-    }
-
-    query += ' WHERE setting_key = ?';
-    params.push(key);
-
-    db.query(query, params, (err, result) => {
-        if (err) {
-            console.error('Database error:', err);
-            return res.status(500).json({
+        if (value === undefined) {
+            return res.status(400).json({
                 success: false,
-                message: 'Error updating setting'
+                message: 'Setting value is required'
             });
         }
 
-        if (result.affectedRows === 0) {
+        // Convert value to string for storage (consistent with MySQL version)
+        let stringValue = value;
+        if (typeof value === 'object') {
+            stringValue = JSON.stringify(value);
+        } else if (typeof value === 'boolean') {
+            stringValue = value.toString();
+        }
+
+        const db = getDB();
+        const updateData = {
+            setting_value: stringValue,
+            updated_at: new Date()
+        };
+
+        if (description) {
+            updateData.description = description;
+        }
+
+        const result = await db.collection('system_settings').updateOne(
+            { setting_key: key },
+            { $set: updateData }
+        );
+
+        if (result.matchedCount === 0) {
             return res.status(404).json({
                 success: false,
                 message: 'Setting not found'
@@ -207,99 +203,102 @@ router.put('/setting/:key', requireRole(['super_admin', 'admin']), (req, res) =>
             success: true,
             message: 'Setting updated successfully'
         });
-    });
+    } catch (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error updating setting'
+        });
+    }
 });
 
 // Create new system setting
-router.post('/setting', requireRole(['super_admin']), (req, res) => {
-    const { setting_key, setting_value, setting_type, category, description, is_public } = req.body;
+router.post('/setting', requireRole(['super_admin']), async (req, res) => {
+    try {
+        const { setting_key, setting_value, setting_type, category, description, is_public } = req.body;
 
-    if (!setting_key || setting_value === undefined) {
-        return res.status(400).json({
-            success: false,
-            message: 'Setting key and value are required'
-        });
-    }
-
-    // Convert value to string for storage
-    let stringValue = setting_value;
-    if (typeof setting_value === 'object') {
-        stringValue = JSON.stringify(setting_value);
-    } else if (typeof setting_value === 'boolean') {
-        stringValue = setting_value.toString();
-    }
-
-    const query = `
-        INSERT INTO system_settings 
-        (setting_key, setting_value, setting_type, category, description, is_public) 
-        VALUES (?, ?, ?, ?, ?, ?)
-    `;
-
-    const params = [
-        setting_key,
-        stringValue,
-        setting_type || 'text',
-        category || 'general',
-        description || '',
-        is_public || false
-    ];
-
-    db.query(query, params, (err, result) => {
-        if (err) {
-            console.error('Database error:', err);
-            if (err.code === 'ER_DUP_ENTRY') {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Setting key already exists'
-                });
-            }
-            return res.status(500).json({
+        if (!setting_key || setting_value === undefined) {
+            return res.status(400).json({
                 success: false,
-                message: 'Error creating setting'
+                message: 'Setting key and value are required'
             });
         }
+
+        // Convert value to string for storage
+        let stringValue = setting_value;
+        if (typeof setting_value === 'object') {
+            stringValue = JSON.stringify(setting_value);
+        } else if (typeof setting_value === 'boolean') {
+            stringValue = setting_value.toString();
+        }
+
+        const db = getDB();
+
+        // Check if key already exists
+        const existing = await db.collection('system_settings').findOne({ setting_key });
+        if (existing) {
+            return res.status(400).json({
+                success: false,
+                message: 'Setting key already exists'
+            });
+        }
+
+        const newSetting = {
+            setting_key,
+            setting_value: stringValue,
+            setting_type: setting_type || 'text',
+            category: category || 'general',
+            description: description || '',
+            is_public: is_public || false,
+            created_at: new Date(),
+            updated_at: new Date()
+        };
+
+        const result = await db.collection('system_settings').insertOne(newSetting);
 
         res.status(201).json({
             success: true,
             message: 'Setting created successfully',
-            data: { id: result.insertId }
+            data: { id: result.insertedId }
         });
-    });
+    } catch (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error creating setting'
+        });
+    }
 });
 
 // Update feature flag
-router.put('/feature/:key', requireRole(['super_admin', 'admin']), (req, res) => {
-    const { key } = req.params;
-    const { is_enabled, description } = req.body;
+router.put('/feature/:key', requireRole(['super_admin', 'admin']), async (req, res) => {
+    try {
+        const { key } = req.params;
+        const { is_enabled, description } = req.body;
 
-    if (is_enabled === undefined) {
-        return res.status(400).json({
-            success: false,
-            message: 'Feature enabled status is required'
-        });
-    }
-
-    let query = 'UPDATE feature_flags SET is_enabled = ?, updated_at = NOW()';
-    let params = [is_enabled];
-
-    if (description) {
-        query += ', description = ?';
-        params.push(description);
-    }
-
-    query += ' WHERE feature_key = ?';
-    params.push(key);
-
-    db.query(query, params, (err, result) => {
-        if (err) {
-            console.error('Database error:', err);
-            return res.status(500).json({
+        if (is_enabled === undefined) {
+            return res.status(400).json({
                 success: false,
-                message: 'Error updating feature flag'
+                message: 'Feature enabled status is required'
             });
         }
 
-        if (result.affectedRows === 0) {
+        const db = getDB();
+        const updateData = {
+            is_enabled: is_enabled === true || is_enabled === 'true',
+            updated_at: new Date()
+        };
+
+        if (description) {
+            updateData.description = description;
+        }
+
+        const result = await db.collection('feature_flags').updateOne(
+            { feature_key: key },
+            { $set: updateData }
+        );
+
+        if (result.matchedCount === 0) {
             return res.status(404).json({
                 success: false,
                 message: 'Feature flag not found'
@@ -310,11 +309,17 @@ router.put('/feature/:key', requireRole(['super_admin', 'admin']), (req, res) =>
             success: true,
             message: 'Feature flag updated successfully'
         });
-    });
+    } catch (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error updating feature flag'
+        });
+    }
 });
 
 // Upload club logo
-router.post('/upload-logo', requireRole(['super_admin', 'admin']), upload.single('logo'), (req, res) => {
+router.post('/upload-logo', requireRole(['super_admin', 'admin']), upload.single('logo'), async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({
@@ -324,32 +329,28 @@ router.post('/upload-logo', requireRole(['super_admin', 'admin']), upload.single
         }
 
         const logoPath = `/uploads/logo/${req.file.filename}`;
+        const db = getDB();
 
         // Update the club_logo setting
-        const query = 'UPDATE system_settings SET setting_value = ?, updated_at = NOW() WHERE setting_key = "club_logo"';
-
-        db.query(query, [logoPath], (err, result) => {
-            if (err) {
-                console.error('Database error:', err);
-                // Clean up uploaded file if database update fails
-                fs.unlinkSync(req.file.path);
-                return res.status(500).json({
-                    success: false,
-                    message: 'Error updating logo setting'
-                });
-            }
-
-            const baseUrl = `${req.protocol}://${req.get('host')}`;
-            res.json({
-                success: true,
-                message: 'Logo uploaded successfully',
-                data: {
-                    logoPath: logoPath,
-                    logoUrl: `${baseUrl}${logoPath}`
+        const result = await db.collection('system_settings').updateOne(
+            { setting_key: "club_logo" },
+            {
+                $set: {
+                    setting_value: logoPath,
+                    updated_at: new Date()
                 }
-            });
-        });
+            }
+        );
 
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        res.json({
+            success: true,
+            message: 'Logo uploaded successfully',
+            data: {
+                logoPath: logoPath,
+                logoUrl: `${baseUrl}${logoPath}`
+            }
+        });
     } catch (error) {
         console.error('Upload error:', error);
         if (req.file) {
@@ -363,42 +364,50 @@ router.post('/upload-logo', requireRole(['super_admin', 'admin']), upload.single
 });
 
 // Get system statistics
-router.get('/stats', requireRole(['super_admin', 'admin']), (req, res) => {
-    const queries = {
-        totalSettings: 'SELECT COUNT(*) as count FROM system_settings',
-        publicSettings: 'SELECT COUNT(*) as count FROM system_settings WHERE is_public = TRUE',
-        totalFeatures: 'SELECT COUNT(*) as count FROM feature_flags',
-        enabledFeatures: 'SELECT COUNT(*) as count FROM feature_flags WHERE is_enabled = TRUE',
-        settingsByCategory: 'SELECT category, COUNT(*) as count FROM system_settings GROUP BY category',
-        featuresByCategory: 'SELECT category, COUNT(*) as count FROM feature_flags GROUP BY category'
-    };
+router.get('/stats', requireRole(['super_admin', 'admin']), async (req, res) => {
+    try {
+        const db = getDB();
 
-    const stats = {};
-    let completed = 0;
-    const totalQueries = Object.keys(queries).length;
+        const [
+            totalSettings,
+            publicSettings,
+            totalFeatures,
+            enabledFeatures,
+            settingsByCategory,
+            featuresByCategory
+        ] = await Promise.all([
+            db.collection('system_settings').countDocuments({}),
+            db.collection('system_settings').countDocuments({ is_public: true }),
+            db.collection('feature_flags').countDocuments({}),
+            db.collection('feature_flags').countDocuments({ is_enabled: true }),
+            db.collection('system_settings').aggregate([
+                { $group: { _id: "$category", count: { $sum: 1 } } }
+            ]).toArray(),
+            db.collection('feature_flags').aggregate([
+                { $group: { _id: "$category", count: { $sum: 1 } } }
+            ]).toArray()
+        ]);
 
-    Object.entries(queries).forEach(([key, query]) => {
-        db.query(query, (err, results) => {
-            if (err) {
-                console.error(`Error in ${key} query:`, err);
-                stats[key] = ['settingsByCategory', 'featuresByCategory'].includes(key) ? [] : 0;
-            } else {
-                if (key === 'settingsByCategory' || key === 'featuresByCategory') {
-                    stats[key] = results;
-                } else {
-                    stats[key] = results[0].count;
-                }
-            }
+        const stats = {
+            totalSettings,
+            publicSettings,
+            totalFeatures,
+            enabledFeatures,
+            settingsByCategory: settingsByCategory.map(item => ({ category: item._id, count: item.count })),
+            featuresByCategory: featuresByCategory.map(item => ({ category: item._id, count: item.count }))
+        };
 
-            completed++;
-            if (completed === totalQueries) {
-                res.json({
-                    success: true,
-                    data: stats
-                });
-            }
+        res.json({
+            success: true,
+            data: stats
         });
-    });
+    } catch (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error fetching system statistics'
+        });
+    }
 });
 
 // Helper function to parse setting values

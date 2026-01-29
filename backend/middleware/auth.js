@@ -4,9 +4,21 @@ const { ObjectId } = require('mongodb');
 
 // Verify JWT token
 const verifyToken = (req, res, next) => {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
+    const authHeader = req.header('Authorization');
+    const secret = process.env.JWT_SECRET;
+
+    console.log('🔍 [AuthMiddleware] Auth Header:', authHeader ? 'Present' : 'Missing');
+    if (!secret) {
+        console.error('❌ [AuthMiddleware] JWT_SECRET is not defined in environment!');
+    }
+
+    const token = authHeader?.replace('Bearer ', '');
+    if (token) {
+        console.log('🔍 [AuthMiddleware] Token (first 10 chars):', token.substring(0, 10) + '...');
+    }
 
     if (!token) {
+        console.warn('❌ No token found in Authorization header');
         return res.status(401).json({
             success: false,
             message: 'Access denied. No token provided.'
@@ -16,8 +28,10 @@ const verifyToken = (req, res, next) => {
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         req.user = decoded;
+        console.log('✅ Token verified for user ID:', decoded.id);
         next();
     } catch (error) {
+        console.error('❌ Token verification failed:', error.message);
         res.status(401).json({
             success: false,
             message: 'Invalid token.'
@@ -62,12 +76,14 @@ const getCurrentUser = async (req, res, next) => {
         );
 
         if (!user) {
+            console.error('❌ User not found or inactive in database for ID:', req.user.id);
             return res.status(401).json({
                 success: false,
                 message: 'User not found or inactive'
             });
         }
 
+        console.log('✅ Current user retrieved:', user.username);
         req.currentUser = {
             id: user._id,
             username: user.username,

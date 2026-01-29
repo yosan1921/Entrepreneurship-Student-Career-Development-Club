@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../db');
+const { getDB } = require('../db');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -46,7 +46,7 @@ const upload = multer({
 });
 
 // Test upload endpoint (NO AUTHENTICATION REQUIRED)
-router.post('/upload', upload.single('media'), (req, res) => {
+router.post('/upload', upload.single('media'), async (req, res) => {
     try {
         console.log('📤 Upload request received');
         console.log('File:', req.file);
@@ -64,67 +64,52 @@ router.post('/upload', upload.single('media'), (req, res) => {
 
         if (!title) {
             console.log('❌ No title provided');
-            // Clean up uploaded file if validation fails
-            fs.unlinkSync(req.file.path);
+            if (req.file) fs.unlinkSync(req.file.path);
             return res.status(400).json({
                 success: false,
                 message: 'Title is required'
             });
         }
 
-        // Determine media type
         const mediaType = req.file.mimetype.startsWith('video/') ? 'video' : 'image';
+        const relativePath = path.join('uploads', 'gallery', req.file.filename);
+        const db = getDB();
 
-        const query = `
-            INSERT INTO gallery 
-            (title, description, category, eventDate, mediaType, filePath, fileName, fileSize, uploadedBy, status) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `;
-
-        const values = [
+        const newItem = {
             title,
-            description || '',
-            category || 'other',
-            eventDate || null,
+            description: description || '',
+            category: category || 'other',
+            eventDate: eventDate ? new Date(eventDate) : null,
             mediaType,
-            req.file.path,
-            req.file.filename,
-            req.file.size,
-            1, // Default uploadedBy (you can implement auth later)
-            status || 'active'
-        ];
+            filePath: relativePath,
+            fileName: req.file.filename,
+            fileSize: req.file.size,
+            uploadedBy: "test_user", // Simplified for test endpoint
+            status: status || 'active',
+            downloadCount: 0,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
 
         console.log('💾 Saving to database...');
-        db.query(query, values, (err, result) => {
-            if (err) {
-                console.error('❌ Database error:', err);
-                // Clean up uploaded file if database insert fails
-                fs.unlinkSync(req.file.path);
-                return res.status(500).json({
-                    success: false,
-                    message: 'Error saving gallery item',
-                    error: err.message
-                });
+        const result = await db.collection('gallery').insertOne(newItem);
+
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        console.log('✅ Upload successful!');
+
+        res.status(201).json({
+            success: true,
+            message: 'Media uploaded successfully',
+            data: {
+                id: result.insertedId,
+                title: title,
+                mediaType: mediaType,
+                fileName: req.file.filename,
+                fileSize: req.file.size,
+                mediaUrl: `${baseUrl}/uploads/gallery/${req.file.filename}`,
+                uploadedAt: new Date().toISOString()
             }
-
-            const baseUrl = `${req.protocol}://${req.get('host')}`;
-            console.log('✅ Upload successful!');
-
-            res.status(201).json({
-                success: true,
-                message: 'Media uploaded successfully',
-                data: {
-                    id: result.insertId,
-                    title: title,
-                    mediaType: mediaType,
-                    fileName: req.file.filename,
-                    fileSize: req.file.size,
-                    mediaUrl: `${baseUrl}/uploads/gallery/${req.file.filename}`,
-                    uploadedAt: new Date().toISOString()
-                }
-            });
         });
-
     } catch (error) {
         console.error('❌ Upload error:', error);
         if (req.file) {
@@ -137,5 +122,7 @@ router.post('/upload', upload.single('media'), (req, res) => {
         });
     }
 });
+
+module.exports = router;
 
 module.exports = router;

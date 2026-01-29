@@ -22,6 +22,7 @@ const api = axios.create({
 // Add token to requests if available
 api.interceptors.request.use((config) => {
     const token = localStorage.getItem('authToken');
+    console.log(`🌐 API Request: ${config.method.toUpperCase()} ${config.url}`, token ? ' (with token)' : ' (no token)');
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
@@ -30,12 +31,19 @@ api.interceptors.request.use((config) => {
 
 // Handle token expiration
 api.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        console.log(`✅ API Response: ${response.status} ${response.config.url}`);
+        return response;
+    },
     (error) => {
+        console.error(`❌ API Error: ${error.response?.status} ${error.config?.url}`, error.response?.data);
         if (error.response?.status === 401) {
+            console.warn('🔄 401 Unauthorized detected. Notifying AuthContext.');
             localStorage.removeItem('authToken');
             localStorage.removeItem('user');
-            window.location.href = '/login';
+
+            // Dispatch custom event to let AuthContext handle it gracefully
+            window.dispatchEvent(new Event('auth-401'));
         }
         return Promise.reject(error);
     }
