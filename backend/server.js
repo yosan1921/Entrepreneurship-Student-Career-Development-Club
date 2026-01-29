@@ -45,6 +45,15 @@ app.use('/api/announcement-likes', require('./routes/announcement-likes'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/system-settings', require('./routes/system-settings'));
 
+// Root route
+app.get('/', (req, res) => {
+    res.json({
+        message: 'Welcome to ESCDC Backend API',
+        status: 'Online',
+        endpoints: '/api/docs'
+    });
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
     res.json({
@@ -135,6 +144,15 @@ app.get('/api/test-members-table', async (req, res) => {
             error: error.message
         });
     }
+});
+
+// 404 Handler - Catch all other routes
+app.use((req, res) => {
+    res.status(404).json({
+        success: false,
+        message: `Cannot ${req.method} ${req.url}`,
+        error: 'Route not found'
+    });
 });
 
 app.listen(PORT, () => {
