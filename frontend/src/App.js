@@ -16,6 +16,7 @@ import Announcements from './components/Announcements';
 import AdminDashboard from './components/AdminDashboard';
 import Footer from './components/Footer';
 
+
 // Protected sections that require login
 const PROTECTED_SECTIONS = ['events', 'gallery', 'event-gallery', 'resources', 'contact', 'announcements', 'admin'];
 

@@ -35,13 +35,17 @@ const Login = ({ onClose, onSuccess }) => {
             const adminRoles = ['super_admin', 'admin', 'editor'];
 
             setTimeout(() => {
-                // Redirect admin users to dashboard, others to home
-                if (adminRoles.includes(userRole)) {
-                    onSuccess && onSuccess(result.user, 'admin'); // Pass 'admin' as target section
-                } else {
-                    onSuccess && onSuccess(result.user, 'home');
-                }
+                // Close modal first to prevent timing issues
                 onClose && onClose();
+                
+                // Then redirect admin users to dashboard, others to home
+                setTimeout(() => {
+                    if (adminRoles.includes(userRole)) {
+                        onSuccess && onSuccess(result.user, 'admin'); // Pass 'admin' as target section
+                    } else {
+                        onSuccess && onSuccess(result.user, 'home');
+                    }
+                }, 100); // Small delay to ensure modal is closing
             }, 1000);
         } else {
             setMessage(result.message);

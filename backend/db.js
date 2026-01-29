@@ -1,42 +1,56 @@
-const mysql = require('mysql2');
+const { MongoClient } = require('mongodb');
 require('dotenv').config();
 
-// Create MySQL connection
-const connection = mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 3306,
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'abcd',
-    multipleStatements: true
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/abcd';
+const DB_NAME = process.env.DB_NAME || 'abcd';
+
+let client;
+let db;
+
+async function connectDB() {
+    try {
+        if (db) {
+            return db;
+        }
+
+        console.log('🔄 Connecting to MongoDB Atlas...');
+
+        client = new MongoClient(MONGODB_URI, {
+            serverSelectionTimeoutMS: 5000,
+            socketTimeoutMS: 45000,
+        });
+
+        await client.connect();
+        db = client.db(DB_NAME);
+
+        console.log('✅ Connected to MongoDB Atlas successfully!');
+        console.log('📊 Database:', DB_NAME);
+
+        return db;
+    } catch (err) {
+        console.error('❌ Error connecting to MongoDB:', err.message);
+        throw err;
+    }
+}
+
+function getDB() {
+    if (!db) {
+        throw new Error('Database not initialized. Call connectDB() first.');
+    }
+    return db;
+}
+
+async function closeDB() {
+    if (client) {
+        await client.close();
+        console.log('🔌 MongoDB connection closed');
+    }
+}
+
+// Handle process termination
+process.on('SIGINT', async () => {
+    await closeDB();
+    process.exit(0);
 });
 
-// Connect to MySQL
-connection.connect((err) => {
-    if (err) {
-        console.error('Error connecting to MySQL database:', err.message);
-        console.log('Make sure:');
-        console.log('1. XAMPP MySQL is running');
-        console.log('2. Database "abcd" exists');
-        console.log('3. Connection details are correct');
-        return;
-    }
-    console.log('Connected to MySQL database successfully!');
-    console.log('Database:', process.env.DB_NAME || 'abcd');
-});
-
-// Handle connection errors
-connection.on('error', (err) => {
-    console.error('MySQL connection error:', err);
-    if (err.code === 'PROTOCOL_CONNECTION_LOST') {
-        console.log('Database connection was closed.');
-    }
-    if (err.code === 'ER_CON_COUNT_ERROR') {
-        console.log('Database has too many connections.');
-    }
-    if (err.code === 'ECONNREFUSED') {
-        console.log('Database connection was refused.');
-    }
-});
-
-module.exports = connection;
+module.exports = { connectDB, getDB, closeDB };

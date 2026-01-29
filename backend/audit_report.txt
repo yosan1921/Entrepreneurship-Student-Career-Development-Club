@@ -1,0 +1,24 @@
+# npm audit report
+
+nodemailer  <=7.0.10
+Severity: moderate
+Nodemailer: Email to an unintended domain can occur due to Interpretation Conflict - https://github.com/advisories/GHSA-mm7p-fcc7-pg87
+NodemailerΓÇÖs addressparser is vulnerable to DoS caused by recursive calls - https://github.com/advisories/GHSA-rcmh-qjqh-p98v
+Nodemailer is vulnerable to DoS through Uncontrolled Recursion - https://github.com/advisories/GHSA-46j5-6fg5-4gv3
+fix available via `npm audit fix --force`
+Will install nodemailer@7.0.13, which is a breaking change
+node_modules/nodemailer
+
+qs  <6.14.1
+Severity: high
+qs's arrayLimit bypass in its bracket notation allows DoS via memory exhaustion - https://github.com/advisories/GHSA-6rw7-vpxm-498p
+fix available via `npm audit fix`
+node_modules/qs
+
+2 vulnerabilities (1 moderate, 1 high)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force

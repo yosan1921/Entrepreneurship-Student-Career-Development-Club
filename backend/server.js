@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const db = require('./db');
+const { connectDB } = require('./db');
 require('dotenv').config();
 
 const app = express();
@@ -15,13 +15,18 @@ app.use(bodyParser.urlencoded({ extended: true }));
 // Serve static files from uploads directory
 app.use('/uploads', express.static('uploads'));
 
-// Test database connection
-function testConnection() {
-    // Connection test is handled in db.js
-    console.log('Database connection initialized');
+// Initialize database connection
+async function initializeDatabase() {
+    try {
+        await connectDB();
+        console.log('✅ Database initialized successfully');
+    } catch (error) {
+        console.error('❌ Failed to initialize database:', error);
+        process.exit(1);
+    }
 }
 
-testConnection();
+initializeDatabase();
 
 // Routes - Fixed to avoid conflicts
 app.use('/api/auth', require('./routes/auth'));
@@ -44,7 +49,7 @@ app.use('/api/system-settings', require('./routes/system-settings'));
 app.get('/api/health', (req, res) => {
     res.json({
         message: 'ESCDC Backend API is running!',
-        database: 'MySQL (XAMPP)',
+        database: 'MongoDB Atlas',
         timestamp: new Date().toISOString()
     });
 });
@@ -90,47 +95,49 @@ app.get('/api/docs', (req, res) => {
     });
 });
 
-// Test database tables
-app.get('/api/test-db', (req, res) => {
-    const query = 'SHOW TABLES';
-    db.query(query, (err, results) => {
-        if (err) {
-            return res.status(500).json({
-                success: false,
-                message: 'Database error',
-                error: err.message
-            });
-        }
+// Test database connection
+app.get('/api/test-db', async (req, res) => {
+    try {
+        const { getDB } = require('./db');
+        const db = getDB();
+        const collections = await db.listCollections().toArray();
 
         res.json({
             success: true,
             message: 'Database connection working',
-            tables: results
+            collections: collections.map(c => c.name)
         });
-    });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Database error',
+            error: error.message
+        });
+    }
 });
 
-// Test members table structure
-app.get('/api/test-members-table', (req, res) => {
-    const query = 'DESCRIBE members';
-    db.query(query, (err, results) => {
-        if (err) {
-            return res.status(500).json({
-                success: false,
-                message: 'Error checking members table',
-                error: err.message
-            });
-        }
+// Test members collection structure
+app.get('/api/test-members-table', async (req, res) => {
+    try {
+        const { getDB } = require('./db');
+        const db = getDB();
+        const members = await db.collection('members').findOne();
 
         res.json({
             success: true,
-            message: 'Members table structure',
-            structure: results
+            message: 'Members collection structure',
+            sampleDocument: members
         });
-    });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error checking members collection',
+            error: error.message
+        });
+    }
 });
 
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`Make sure XAMPP MySQL is running`);
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`📊 Using MongoDB Atlas`);
 });
