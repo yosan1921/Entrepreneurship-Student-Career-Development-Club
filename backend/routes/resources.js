@@ -19,32 +19,99 @@ const storage = multer.diskStorage({
     filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
         const ext = path.extname(file.originalname);
-        const name = path.basename(file.originalname, ext);
-        cb(null, `${name}-${uniqueSuffix}${ext}`);
+        cb(null, `resource-${uniqueSuffix}${ext}`);
     }
 });
 
 const upload = multer({
     storage,
-    limits: {
-        fileSize: 50 * 1024 * 1024 // 50MB limit
+    limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit
+    fileFilter: (req, file, cb) => {
+        const allowedMimes = [
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-powerpoint',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/zip',
+            'application/x-zip-compressed',
+            'video/mp4',
+            'application/octet-stream'
+        ];
+        if (allowedMimes.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error(`File type not allowed: ${file.mimetype}`), false);
+        }
     }
 });
+
+// Derive a clean file type label from mimetype or extension
+function getFileTypeLabel(mimetype, originalname) {
+    const ext = path.extname(originalname || '').toLowerCase().replace('.', '');
+    const mimeMap = {
+        'application/pdf': 'pdf',
+        'application/msword': 'doc',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+        'application/vnd.ms-powerpoint': 'ppt',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+        'application/vnd.ms-excel': 'xls',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+        'application/zip': 'zip',
+        'application/x-zip-compressed': 'zip',
+        'video/mp4': 'mp4'
+    };
+    return mimeMap[mimetype] || ext || 'file';
+}
+
+// Default resource categories
+const DEFAULT_CATEGORIES = [
+    'CV & Resume Templates',
+    'Internship & Job Guides',
+    'Research Papers',
+    'Student Handbook',
+    'Scholarship Information',
+    'Business Proposal Templates',
+    'Training Videos',
+    'Meeting Minutes',
+    'Official Documents',
+    'Event Materials',
+    'Annual Reports',
+    'E-books'
+];
+
+// Seed default categories if they don't exist
+async function seedDefaultCategories(db) {
+    try {
+        const existing = await db.collection('resource_categories').countDocuments({});
+        if (existing === 0) {
+            const docs = DEFAULT_CATEGORIES.map(name => ({
+                name,
+                description: '',
+                createdAt: new Date()
+            }));
+            await db.collection('resource_categories').insertMany(docs);
+            console.log('✅ Seeded default resource categories');
+        }
+    } catch (err) {
+        console.error('⚠️ Could not seed categories:', err.message);
+    }
+}
 
 // ================== PUBLIC ROUTES ==================
 
-// Get all active resources (public)
+// Get all published resources (public)
 router.get('/', async (req, res) => {
     try {
-        console.log('📚 GET /api/resources called');
-        const { category, type, search, featured, limit = 50, offset = 0 } = req.query;
+        const { category, search, page = 1, limit = 12 } = req.query;
         const db = getDB();
 
-        let query = { status: 'Active' };
+        // Seed categories on first use
+        await seedDefaultCategories(db);
 
-        if (type) {
-            query.type = type;
-        }
+        let query = { isPublished: true };
 
         if (search) {
             query.$or = [
@@ -53,268 +120,221 @@ router.get('/', async (req, res) => {
             ];
         }
 
-        if (featured === 'true') {
-            query.featured = { $in: [1, true] };
+        if (category && category !== 'All') {
+            query.category = category;
         }
 
-        // Handle category if provided (look up category_id first)
-        if (category) {
-            const cat = await db.collection('resource_categories').findOne({ name: category });
-            if (cat) {
-                query.category_id = cat._id.toString();
-            } else {
-                // If category not found, return empty results
-                return res.json({ success: true, resources: [], total: 0 });
-            }
-        }
+        const pageNum = Math.max(1, parseInt(page));
+        const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
+        const skip = (pageNum - 1) * limitNum;
 
-        const results = await db.collection('resources')
-            .find(query)
-            .sort({ pinned: -1, featured: -1, uploaded_at: -1 })
-            .skip(parseInt(offset))
-            .limit(parseInt(limit))
-            .toArray();
-
-        // Fetch categories to map names
-        const categories = await db.collection('resource_categories').find({}).toArray();
-        const catMap = {};
-        categories.forEach(c => catMap[c._id.toString()] = c.name);
-
-        const resourcesWithCat = results.map(r => ({
-            ...r,
-            id: r._id,
-            category_name: catMap[r.category_id] || 'Uncategorized'
-        }));
-
-        console.log(`✅ GET /api/resources successful: ${results.length} resources found`);
+        const [results, total] = await Promise.all([
+            db.collection('resources')
+                .find(query)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limitNum)
+                .toArray(),
+            db.collection('resources').countDocuments(query)
+        ]);
 
         res.json({
             success: true,
-            resources: resourcesWithCat,
-            total: resourcesWithCat.length
-        });
-    } catch (err) {
-        console.error('❌ Database error in GET /api/resources:', err);
-        return res.status(500).json({
-            success: false,
-            message: 'Error fetching resources',
-            error: err.message
-        });
-    }
-});
-
-// Get categories
-router.get('/categories', async (req, res) => {
-    try {
-        console.log('📂 GET /api/resources/categories called');
-        const db = getDB();
-        const results = await db.collection('resource_categories').find({}).sort({ name: 1 }).toArray();
-
-        res.json({
-            success: true,
-            categories: results.map(c => ({ ...c, id: c._id }))
-        });
-    } catch (err) {
-        console.error('❌ Database error in GET /api/resources/categories:', err);
-        return res.status(500).json({
-            success: false,
-            message: 'Error fetching categories',
-            error: err.message
-        });
-    }
-});
-
-// Get tags
-router.get('/tags', (req, res) => {
-    res.json({
-        success: true,
-        tags: []
-    });
-});
-
-// Debug endpoint to check table structure
-router.get('/debug/table', (req, res) => {
-    res.json({
-        success: true,
-        message: 'MongoDB uses collections, not tables with fixed structures.'
-    });
-});
-
-// Create resource (public endpoint for testing - deprecated/migrated to use MongoDB)
-router.post('/', upload.single('file'), async (req, res) => {
-    try {
-        console.log('📝 POST /api/resources called');
-        const { title, description, category_id, file_url, type, featured, pinned, status } = req.body;
-
-        if (!title || title.trim() === '') {
-            return res.status(400).json({ success: false, message: 'Title is required' });
-        }
-
-        let resourceType = type || 'link';
-        let filePath = '';
-
-        if (req.file) {
-            resourceType = 'file';
-            filePath = req.file.filename;
-        } else if (file_url && file_url.trim() !== '') {
-            resourceType = 'link';
-            filePath = file_url.trim();
-        }
-
-        const db = getDB();
-        const newItem = {
-            title: title.trim(),
-            description: description ? description.trim() : '',
-            category_id: category_id || null,
-            type: resourceType,
-            file_path: filePath,
-            status: status || 'Active',
-            featured: featured === 'true' || featured === true ? 1 : 0,
-            pinned: pinned === 'true' || pinned === true ? 1 : 0,
-            uploaded_at: new Date(),
-            download_count: 0,
-            created_by: null
-        };
-
-        const result = await db.collection('resources').insertOne(newItem);
-
-        res.json({
-            success: true,
-            message: 'Resource created successfully',
-            resource: { id: result.insertedId, ...newItem }
-        });
-    } catch (err) {
-        console.error('❌ Error in POST /api/resources:', err);
-        return res.status(500).json({ success: false, message: 'Error creating resource', error: err.message });
-    }
-});
-
-// ================== ADMIN ROUTES ==================
-
-// Get all resources (admin)
-router.get('/admin', verifyToken, async (req, res) => {
-    try {
-        console.log('🔧 GET /api/resources/admin called');
-        const { category, status, search, limit = 100, offset = 0 } = req.query;
-        const db = getDB();
-
-        let query = {};
-
-        if (status) {
-            query.status = status;
-        }
-
-        if (search) {
-            query.$or = [
-                { title: { $regex: search, $options: 'i' } },
-                { description: { $regex: search, $options: 'i' } }
-            ];
-        }
-
-        if (category) {
-            const cat = await db.collection('resource_categories').findOne({ name: category });
-            if (cat) {
-                query.category_id = cat._id.toString();
-            } else {
-                return res.json({ success: true, resources: [], total: 0 });
-            }
-        }
-
-        const results = await db.collection('resources')
-            .find(query)
-            .sort({ pinned: -1, featured: -1, uploaded_at: -1 })
-            .skip(parseInt(offset))
-            .limit(parseInt(limit))
-            .toArray();
-
-        // Fetch related data
-        const categories = await db.collection('resource_categories').find({}).toArray();
-        const catMap = {};
-        categories.forEach(c => catMap[c._id.toString()] = c.name);
-
-        const adminUsers = await db.collection('admin_users').find({}).toArray();
-        const userMap = {};
-        adminUsers.forEach(u => userMap[u._id.toString()] = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.username);
-
-        const resourcesProcessed = results.map(r => ({
-            ...r,
-            id: r._id,
-            category_name: catMap[r.category_id] || 'Uncategorized',
-            created_by_name: userMap[r.created_by?.toString()] || 'System',
-            updated_by_name: userMap[r.updated_by?.toString()] || 'System'
-        }));
-
-        const total = await db.collection('resources').countDocuments(query);
-
-        res.json({
-            success: true,
-            resources: resourcesProcessed,
+            resources: results.map(r => ({ ...r, id: r._id })),
             total,
-            pagination: {
-                limit: parseInt(limit),
-                offset: parseInt(offset),
-                hasMore: (parseInt(offset) + results.length) < total
-            }
+            page: pageNum,
+            totalPages: Math.ceil(total / limitNum)
         });
     } catch (err) {
-        console.error('❌ Error in GET /api/resources/admin:', err);
+        console.error('❌ GET /api/resources error:', err);
         return res.status(500).json({ success: false, message: 'Error fetching resources', error: err.message });
     }
 });
 
-// Create resource (admin)
-router.post('/admin', verifyToken, upload.single('file'), async (req, res) => {
+// Get categories (public)
+router.get('/categories', async (req, res) => {
     try {
-        console.log('📝 POST /api/resources/admin called');
-        const { title, description, category_id, file_url, type, featured, pinned, status } = req.body;
-
-        if (!title || title.trim() === '') {
-            return res.status(400).json({ success: false, message: 'Title is required' });
-        }
-
-        let resourceType = type || 'link';
-        let filePath = '';
-
-        if (req.file) {
-            resourceType = 'file';
-            filePath = req.file.filename;
-        } else if (file_url && file_url.trim() !== '') {
-            resourceType = 'link';
-            filePath = file_url.trim();
-        }
-
         const db = getDB();
-        const newItem = {
-            title: title.trim(),
-            description: description ? description.trim() : '',
-            category_id: category_id || null,
-            type: resourceType,
-            file_path: filePath,
-            status: status || 'Active',
-            featured: featured === 'true' || featured === true ? 1 : 0,
-            pinned: pinned === 'true' || pinned === true ? 1 : 0,
-            uploaded_at: new Date(),
-            download_count: 0,
-            created_by: req.user ? req.user.id : null
-        };
+        await seedDefaultCategories(db);
+        const results = await db.collection('resource_categories').find({}).sort({ name: 1 }).toArray();
+        res.json({ success: true, categories: results.map(c => ({ ...c, id: c._id })) });
+    } catch (err) {
+        console.error('❌ GET /api/resources/categories error:', err);
+        return res.status(500).json({ success: false, message: 'Error fetching categories', error: err.message });
+    }
+});
 
-        const result = await db.collection('resources').insertOne(newItem);
+// Get tags (stub)
+router.get('/tags', (req, res) => res.json({ success: true, tags: [] }));
+
+// ================== ADMIN ROUTES ==================
+
+// Get all resources (admin) — includes unpublished
+router.get('/admin', verifyToken, async (req, res) => {
+    try {
+        const { category, status, search, page = 1, limit = 20 } = req.query;
+        const db = getDB();
+
+        let query = {};
+
+        if (status === 'published') query.isPublished = true;
+        else if (status === 'unpublished') query.isPublished = false;
+
+        if (search) {
+            query.$or = [
+                { title: { $regex: search, $options: 'i' } },
+                { description: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        if (category && category !== 'All') {
+            query.category = category;
+        }
+
+        const pageNum = Math.max(1, parseInt(page));
+        const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+        const skip = (pageNum - 1) * limitNum;
+
+        const [results, total] = await Promise.all([
+            db.collection('resources')
+                .find(query)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limitNum)
+                .toArray(),
+            db.collection('resources').countDocuments(query)
+        ]);
 
         res.json({
             success: true,
-            message: 'Resource created successfully',
-            resource: { id: result.insertedId, ...newItem }
+            resources: results.map(r => ({ ...r, id: r._id })),
+            total,
+            page: pageNum,
+            totalPages: Math.ceil(total / limitNum)
         });
     } catch (err) {
-        console.error('❌ Error in POST /api/resources/admin:', err);
+        console.error('❌ GET /api/resources/admin error:', err);
+        return res.status(500).json({ success: false, message: 'Error fetching resources', error: err.message });
+    }
+});
+
+// Create resource (admin) — multipart/form-data
+router.post('/admin', verifyToken, upload.single('file'), async (req, res) => {
+    try {
+        const { title, description, category, isPublished } = req.body;
+
+        if (!title || title.trim() === '') {
+            // Clean up uploaded file if validation fails
+            if (req.file) fs.unlinkSync(req.file.path);
+            return res.status(400).json({ success: false, message: 'Title is required' });
+        }
+
+        if (!req.file) {
+            return res.status(400).json({ success: false, message: 'A file is required' });
+        }
+
+        const db = getDB();
+        const newResource = {
+            title: title.trim(),
+            description: description ? description.trim() : '',
+            category: category || 'Official Documents',
+            fileName: req.file.originalname,
+            filePath: req.file.filename,
+            fileType: getFileTypeLabel(req.file.mimetype, req.file.originalname),
+            fileSize: req.file.size,
+            mimeType: req.file.mimetype,
+            isPublished: isPublished === 'true' || isPublished === true,
+            downloadCount: 0,
+            uploadedBy: req.user ? req.user.id : null,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
+
+        const result = await db.collection('resources').insertOne(newResource);
+
+        res.status(201).json({
+            success: true,
+            message: 'Resource created successfully',
+            resource: { ...newResource, id: result.insertedId }
+        });
+    } catch (err) {
+        console.error('❌ POST /api/resources/admin error:', err);
+        if (req.file && fs.existsSync(req.file.path)) {
+            try { fs.unlinkSync(req.file.path); } catch (_) { }
+        }
         return res.status(500).json({ success: false, message: 'Error creating resource', error: err.message });
     }
 });
 
-// Delete resource
+// Update resource metadata (admin)
+router.put('/admin/:id', verifyToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Invalid resource ID' });
+        }
+
+        const { title, description, category, isPublished } = req.body;
+        const db = getDB();
+
+        const existing = await db.collection('resources').findOne({ _id: new ObjectId(id) });
+        if (!existing) {
+            return res.status(404).json({ success: false, message: 'Resource not found' });
+        }
+
+        const updateFields = { updatedAt: new Date() };
+        if (title !== undefined) updateFields.title = title.trim();
+        if (description !== undefined) updateFields.description = description.trim();
+        if (category !== undefined) updateFields.category = category;
+        if (isPublished !== undefined) updateFields.isPublished = isPublished === 'true' || isPublished === true || isPublished === 1;
+
+        await db.collection('resources').updateOne(
+            { _id: new ObjectId(id) },
+            { $set: updateFields }
+        );
+
+        const updated = await db.collection('resources').findOne({ _id: new ObjectId(id) });
+        res.json({ success: true, message: 'Resource updated successfully', resource: { ...updated, id: updated._id } });
+    } catch (err) {
+        console.error('❌ PUT /api/resources/admin/:id error:', err);
+        return res.status(500).json({ success: false, message: 'Error updating resource', error: err.message });
+    }
+});
+
+// Toggle publish/unpublish (admin)
+router.patch('/admin/:id/publish', verifyToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Invalid resource ID' });
+        }
+
+        const db = getDB();
+        const existing = await db.collection('resources').findOne({ _id: new ObjectId(id) });
+        if (!existing) {
+            return res.status(404).json({ success: false, message: 'Resource not found' });
+        }
+
+        const newPublished = !existing.isPublished;
+        await db.collection('resources').updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { isPublished: newPublished, updatedAt: new Date() } }
+        );
+
+        res.json({
+            success: true,
+            message: newPublished ? 'Resource published' : 'Resource unpublished',
+            isPublished: newPublished
+        });
+    } catch (err) {
+        console.error('❌ PATCH /api/resources/admin/:id/publish error:', err);
+        return res.status(500).json({ success: false, message: 'Error toggling publish', error: err.message });
+    }
+});
+
+// Delete resource (admin)
 router.delete('/:id', verifyToken, async (req, res) => {
     try {
-        console.log('🗑️ DELETE /api/resources/:id called');
         const resourceId = req.params.id;
         if (!ObjectId.isValid(resourceId)) {
             return res.status(400).json({ success: false, message: 'Invalid ID' });
@@ -329,68 +349,59 @@ router.delete('/:id', verifyToken, async (req, res) => {
 
         await db.collection('resources').deleteOne({ _id: new ObjectId(resourceId) });
 
-        // Physical file deletion
-        if (resource.type === 'file' && resource.file_path) {
-            const filePath = path.join(__dirname, '../uploads/resources', resource.file_path);
+        // Delete physical file
+        if (resource.filePath) {
+            const filePath = path.join(__dirname, '../uploads/resources', resource.filePath);
             if (fs.existsSync(filePath)) {
                 try { fs.unlinkSync(filePath); } catch (e) {
-                    console.error('⚠️ Warning: Could not delete physical file:', e.message);
+                    console.error('⚠️ Could not delete file:', e.message);
                 }
             }
         }
 
         res.json({ success: true, message: 'Resource deleted successfully' });
     } catch (err) {
-        console.error('❌ Error in DELETE /api/resources/:id:', err);
+        console.error('❌ DELETE /api/resources/:id error:', err);
         return res.status(500).json({ success: false, message: 'Error deleting resource', error: err.message });
     }
 });
 
-// Get categories for admin
+// Admin categories (protected)
 router.get('/admin/categories', verifyToken, async (req, res) => {
     try {
         const db = getDB();
+        await seedDefaultCategories(db);
         const results = await db.collection('resource_categories').find({}).sort({ name: 1 }).toArray();
         res.json({ success: true, categories: results.map(c => ({ ...c, id: c._id })) });
     } catch (err) {
-        console.error('❌ Error in GET /api/resources/admin/categories:', err);
         return res.status(500).json({ success: false, message: 'Error fetching categories' });
     }
 });
 
-// Get stats endpoint
+// Stats (admin)
 router.get('/stats', verifyToken, async (req, res) => {
     try {
         const db = getDB();
-        const [
-            total_resources,
-            active_resources,
-            featured_resources,
-            total_downloads,
-            file_resources,
-            link_resources
-        ] = await Promise.all([
+        const [total, published, unpublished, downloadsAgg] = await Promise.all([
             db.collection('resources').countDocuments({}),
-            db.collection('resources').countDocuments({ status: 'Active' }),
-            db.collection('resources').countDocuments({ featured: { $in: [1, true] } }),
-            db.collection('resources').aggregate([{ $group: { _id: null, total: { $sum: "$download_count" } } }]).toArray(),
-            db.collection('resources').countDocuments({ type: 'file' }),
-            db.collection('resources').countDocuments({ type: 'link' })
+            db.collection('resources').countDocuments({ isPublished: true }),
+            db.collection('resources').countDocuments({ isPublished: false }),
+            db.collection('resources').aggregate([
+                { $group: { _id: null, total: { $sum: '$downloadCount' } } }
+            ]).toArray()
         ]);
 
         res.json({
             success: true,
             stats: {
-                total_resources,
-                active_resources,
-                featured_resources,
-                total_downloads: total_downloads[0]?.total || 0,
-                file_resources,
-                link_resources
+                total_resources: total,
+                active_resources: published,
+                unpublished_resources: unpublished,
+                total_downloads: downloadsAgg[0]?.total || 0
             }
         });
     } catch (err) {
-        console.error('❌ Error in GET /api/resources/stats:', err);
+        console.error('❌ GET /api/resources/stats error:', err);
         return res.status(500).json({ success: false, message: 'Error fetching stats' });
     }
 });
@@ -404,21 +415,17 @@ async function handleResourceDownload(req, res) {
         }
 
         const db = getDB();
-        const resource = await db.collection('resources').findOne({ _id: new ObjectId(resourceId), status: "Active" });
+        const resource = await db.collection('resources').findOne({ _id: new ObjectId(resourceId) });
 
         if (!resource) {
             return res.status(404).json({ success: false, message: 'Resource not found' });
         }
 
-        if (resource.type === 'link') {
-            return res.json({ success: true, message: 'Link resource', downloadUrl: resource.file_path, type: 'link' });
+        if (!resource.filePath) {
+            return res.status(400).json({ success: false, message: 'Resource has no file' });
         }
 
-        if (resource.type !== 'file' || !resource.file_path) {
-            return res.status(400).json({ success: false, message: 'Resource is not downloadable' });
-        }
-
-        const fullPath = path.join(__dirname, '../uploads/resources', resource.file_path);
+        const fullPath = path.join(__dirname, '../uploads/resources', resource.filePath);
 
         if (!fs.existsSync(fullPath)) {
             return res.status(404).json({ success: false, message: 'File not found on server' });
@@ -429,20 +436,20 @@ async function handleResourceDownload(req, res) {
             return res.status(400).json({ success: false, message: 'Path does not point to a valid file' });
         }
 
-        // Update download count
+        // Increment download count
         await db.collection('resources').updateOne(
             { _id: new ObjectId(resourceId) },
-            { $inc: { download_count: 1 } }
+            { $inc: { downloadCount: 1 } }
         );
 
-        const fileName = resource.file_name || resource.file_path;
-        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-        res.setHeader('Content-Type', resource.file_type || 'application/octet-stream');
+        const fileName = resource.fileName || resource.filePath;
+        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
+        res.setHeader('Content-Type', resource.mimeType || 'application/octet-stream');
         res.setHeader('Content-Length', stats.size);
 
         fs.createReadStream(fullPath).pipe(res);
     } catch (err) {
-        console.error('❌ Error in download handler:', err);
+        console.error('❌ Download error:', err);
         if (!res.headersSent) {
             res.status(500).json({ success: false, message: 'Error processing download' });
         }

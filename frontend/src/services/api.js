@@ -167,18 +167,25 @@ export const galleryAPI = {
 
 // Resources API
 export const resourcesAPI = {
-    getAll: (type) => api.get('/resources', { params: { type } }),
-    getAllAdmin: (filters) => api.get('/resources/admin', { params: filters }),
+    // Public
+    getAll: (params) => api.get('/resources', { params }),
     getCategories: () => api.get('/resources/categories'),
-    getTags: () => api.get('/resources/tags'),
+    downloadFile: (id) => `${API_BASE_URL}/resources/${id}/download`,
+
+    // Admin
+    getAllAdmin: (filters) => api.get('/resources/admin', { params: filters }),
     getStats: () => api.get('/resources/stats'),
-    create: (resourceData) => api.post('/resources', resourceData),
+    uploadResource: (formData, onUploadProgress) => api.post('/resources/admin', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress
+    }),
     update: (id, resourceData) => api.put(`/resources/admin/${id}`, resourceData),
+    togglePublish: (id) => api.patch(`/resources/admin/${id}/publish`),
     delete: (id) => api.delete(`/resources/${id}`),
-    download: (id) => api.post(`/resources/${id}/download`),
-    createCategory: (categoryData) => api.post('/resources/categories', categoryData),
-    updateCategory: (id, categoryData) => api.put(`/resources/categories/${id}`, categoryData),
-    deleteCategory: (id) => api.delete(`/resources/categories/${id}`),
+
+    // Legacy stubs kept for compatibility
+    getTags: () => api.get('/resources/tags'),
+    create: (resourceData) => api.post('/resources/admin', resourceData),
 };
 
 // Announcements API
