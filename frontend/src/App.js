@@ -79,19 +79,19 @@ const AppContent = () => {
             case 'event-gallery': return <EventGallery />;
             case 'announcements': return <Announcements />;
             case 'contact': return <Contact />;
-            case 'admin': return <AdminDashboard />;
+            case 'admin': return <AdminDashboard setActiveSection={setActiveSection} />;
             default: return <Home setActiveSection={setActiveSection} />;
         }
     };
 
     return (
         <div className="min-h-screen flex flex-col bg-gray-50">
-            <Header activeSection={activeSection} setActiveSection={setActiveSection} />
-            <Navigation activeSection={activeSection} setActiveSection={setActiveSection} />
+            {activeSection !== 'admin' && <Header activeSection={activeSection} setActiveSection={setActiveSection} />}
+            {activeSection !== 'admin' && <Navigation activeSection={activeSection} setActiveSection={setActiveSection} />}
             <main className="flex-1">
                 {renderSection()}
             </main>
-            <Footer />
+            {activeSection !== 'admin' && <Footer />}
         </div>
     );
 }

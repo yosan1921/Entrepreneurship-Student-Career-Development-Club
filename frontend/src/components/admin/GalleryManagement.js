@@ -11,6 +11,9 @@ const GalleryManagement = () => {
     const [editingItem, setEditingItem] = useState(null);
     const [stats, setStats] = useState({});
     const [uploadProgress, setUploadProgress] = useState(0);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(12);
 
     const categories = [
         { id: 'all', label: 'All Categories', icon: '🌈' },
@@ -61,6 +64,27 @@ const GalleryManagement = () => {
         fetchGalleryItems();
         fetchStats();
     }, [fetchGalleryItems, fetchStats]);
+
+    // Reset page when filters change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [selectedCategory, selectedType, searchTerm, itemsPerPage]);
+
+    // Filtering and Pagination Logic
+    const processedItems = React.useMemo(() => {
+        const filtered = galleryItems.filter(item => 
+            item.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            item.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            item.uploadedByName?.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+        return filtered;
+    }, [galleryItems, searchTerm]);
+
+    const totalPages = Math.ceil(processedItems.length / itemsPerPage);
+    const paginatedItems = processedItems.slice(
+        (currentPage - 1) * itemsPerPage,
+        currentPage * itemsPerPage
+    );
 
     const handleUpload = async (formData) => {
         try {
@@ -222,35 +246,49 @@ const GalleryManagement = () => {
                     ))}
                 </div>
 
-                {/* Dropdowns */}
-                <div className="flex items-center gap-3 shrink-0">
-                    <select
-                        value={selectedType}
-                        onChange={(e) => setSelectedType(e.target.value)}
-                        className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider bg-slate-50 border border-slate-100 rounded-xl outline-none focus:border-indigo-500 text-slate-600 cursor-pointer"
-                    >
-                        {mediaTypes.map(type => (
-                            <option key={type.id} value={type.id}>
-                                {type.label}
-                            </option>
-                        ))}
-                    </select>
-                    <button
-                        onClick={() => {
-                            fetchGalleryItems();
-                            fetchStats();
-                        }}
-                        className="p-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-xl text-slate-600 transition-all hover:scale-102"
-                        title="Refresh list"
-                    >
-                        🔄
-                    </button>
+                {/* Dropdowns & Search */}
+                <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
+                    <div className="relative w-full sm:w-auto">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <svg className="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                        </div>
+                        <input
+                            type="text"
+                            placeholder="Search gallery..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full sm:w-48 pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-xs font-semibold text-slate-700 placeholder-slate-400"
+                        />
+                    </div>
+                    <div className="flex items-center gap-3 w-full sm:w-auto">
+                        <select
+                            value={selectedType}
+                            onChange={(e) => setSelectedType(e.target.value)}
+                            className="flex-1 sm:flex-none px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider bg-slate-50 border border-slate-100 rounded-xl outline-none focus:border-indigo-500 text-slate-600 cursor-pointer"
+                        >
+                            {mediaTypes.map(type => (
+                                <option key={type.id} value={type.id}>
+                                    {type.label}
+                                </option>
+                            ))}
+                        </select>
+                        <button
+                            onClick={() => {
+                                fetchGalleryItems();
+                                fetchStats();
+                            }}
+                            className="p-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-xl text-slate-600 transition-all hover:scale-102 shrink-0"
+                            title="Refresh list"
+                        >
+                            🔄
+                        </button>
+                    </div>
                 </div>
             </div>
 
             {/* Gallery Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {galleryItems.map(item => (
+                {paginatedItems.map(item => (
                     <div key={item.id} className="group relative bg-white border border-slate-100 rounded-2xl overflow-hidden transition-all duration-300 shadow-premium hover:shadow-lg">
                         {/* Media Preview Box */}
                         <div className="aspect-[4/3] bg-slate-950 relative overflow-hidden flex items-center justify-center">
@@ -351,22 +389,100 @@ const GalleryManagement = () => {
                 ))}
             </div>
 
+            {/* Pagination Control */}
+            {totalPages > 0 && (
+                <div className="bg-slate-50 border border-slate-100 p-4 sm:p-6 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 font-sans">
+                    <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
+                        <span className="text-xs font-semibold text-slate-500">
+                            Showing <span className="font-extrabold text-slate-900">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="font-extrabold text-slate-900">{Math.min(currentPage * itemsPerPage, processedItems.length)}</span> of <span className="font-extrabold text-slate-900">{processedItems.length}</span>
+                        </span>
+                        <select 
+                            value={itemsPerPage} 
+                            onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                            className="bg-white border border-slate-200 text-slate-700 text-xs rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 block p-2 outline-none cursor-pointer shadow-sm font-semibold"
+                        >
+                            <option value="12">12 / page</option>
+                            <option value="24">24 / page</option>
+                            <option value="48">48 / page</option>
+                        </select>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            disabled={currentPage === 1}
+                            className="px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 hover:text-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                        >
+                            <span className="sr-only">Previous</span>
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
+                        </button>
+                        
+                        <div className="hidden sm:flex items-center gap-1">
+                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                let pageNum;
+                                if (totalPages <= 5) pageNum = i + 1;
+                                else if (currentPage <= 3) pageNum = i + 1;
+                                else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                                else pageNum = currentPage - 2 + i;
+
+                                return (
+                                    <button
+                                        key={pageNum}
+                                        onClick={() => setCurrentPage(pageNum)}
+                                        className={`w-9 h-9 rounded-xl text-xs font-extrabold transition-all shadow-sm ${
+                                            currentPage === pageNum
+                                                ? 'bg-slate-950 text-white shadow-premium'
+                                                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-indigo-600'
+                                        }`}
+                                    >
+                                        {pageNum}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <div className="sm:hidden text-xs font-extrabold text-slate-700 px-2">
+                            {currentPage} / {totalPages}
+                        </div>
+
+                        <button
+                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                            disabled={currentPage === totalPages}
+                            className="px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 hover:text-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                        >
+                            <span className="sr-only">Next</span>
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Empty State Redesign */}
-            {galleryItems.length === 0 && (
+            {processedItems.length === 0 && (
                 <div className="text-center py-20 bg-slate-50 border border-dashed border-slate-200 rounded-3xl p-8 max-w-lg mx-auto shadow-premium animate-fade-in mt-10">
                     <div className="w-16 h-16 bg-white border border-slate-100 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-6 shadow-premium">
                         📸
                     </div>
                     <h3 className="text-lg font-bold text-slate-900 mb-1">No media files found</h3>
                     <p className="text-slate-500 font-sans text-xs max-w-xs mx-auto leading-relaxed mb-6">
-                        No matches were found for the selected category filters. Start uploading to showcase the ESCDC events.
+                        {searchTerm 
+                            ? `We couldn't find any media matching "${searchTerm}". Try resetting your filters or search query.`
+                            : 'No matches were found for the selected category filters. Start uploading to showcase the ESCDC events.'}
                     </p>
-                    <button
-                        onClick={() => setShowUploadModal(true)}
-                        className="px-5 py-2.5 bg-slate-950 text-white rounded-xl font-bold hover:bg-slate-900 transition-all text-xs uppercase tracking-wider"
-                    >
-                        Upload First Item
-                    </button>
+                    {searchTerm ? (
+                        <button
+                            onClick={() => setSearchTerm('')}
+                            className="px-5 py-2.5 bg-slate-950 text-white rounded-xl font-bold hover:bg-slate-900 transition-all text-xs uppercase tracking-wider"
+                        >
+                            Clear Search
+                        </button>
+                    ) : (
+                        <button
+                            onClick={() => setShowUploadModal(true)}
+                            className="px-5 py-2.5 bg-slate-950 text-white rounded-xl font-bold hover:bg-slate-900 transition-all text-xs uppercase tracking-wider"
+                        >
+                            Upload First Item
+                        </button>
+                    )}
                 </div>
             )}
 
@@ -432,7 +548,7 @@ const UploadModal = ({ onClose, onUpload, uploadProgress }) => {
     };
 
     return (
-        <div className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+        <div className="fixed inset-0 lg:left-64 lg:top-[73px] z-50 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
             <div className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl border border-slate-100 animate-slide-up flex flex-col max-h-[90vh]">
                 <div className="px-8 py-5 border-b border-slate-100 flex items-center justify-between">
                     <h3 className="text-lg font-bold text-slate-900">Upload Media</h3>
@@ -583,7 +699,7 @@ const EditModal = ({ item, onClose, onSave }) => {
     };
 
     return (
-        <div className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+        <div className="fixed inset-0 lg:left-64 lg:top-[73px] z-50 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
             <div className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl border border-slate-100 animate-slide-up flex flex-col max-h-[90vh]">
                 <div className="px-8 py-5 border-b border-slate-100 flex items-center justify-between">
                     <h3 className="text-lg font-bold text-slate-900">Edit Gallery Details</h3>

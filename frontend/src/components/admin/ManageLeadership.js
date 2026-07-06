@@ -254,7 +254,7 @@ const LeaderModal = ({ leader, onClose, onSave, submitting }) => {
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 lg:left-64 lg:top-[73px] z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto transform transition-all animate-in zoom-in-95 duration-200">
                 <div className="p-6 border-b border-gray-100 flex justify-between items-center sticky top-0 bg-white z-10">
                     <div>

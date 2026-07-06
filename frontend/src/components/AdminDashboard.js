@@ -13,11 +13,11 @@ import AnnouncementsManagement from './admin/AnnouncementsManagement';
 import ReportsManagement from './admin/ReportsManagement';
 import SystemSettings from './admin/SystemSettings';
 
-const AdminDashboard = () => {
+const AdminDashboard = ({ setActiveSection }) => {
     const [activeTab, setActiveTab] = useState('overview');
     const [dashboardData, setDashboardData] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
     const { user, hasRole, logout } = useAuth();
 
     const handleLogout = () => {
@@ -142,6 +142,16 @@ const AdminDashboard = () => {
                                 </div>
                             </div>
                             <button
+                                onClick={() => setActiveSection && setActiveSection('home')}
+                                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200"
+                                title="Exit Dashboard and Return to Website"
+                            >
+                                <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 01-1-1h-2a1 1 0 01-1 1v4a1 1 0 001 1m-6 0h6" />
+                                </svg>
+                                <span className="hidden sm:inline">Go to Website</span>
+                            </button>
+                            <button
                                 onClick={handleLogout}
                                 className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                 title="Logout"
@@ -157,20 +167,14 @@ const AdminDashboard = () => {
             </div>
 
             <div className="flex">
-                {/* Sidebar */}
-                <aside className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-                    } lg:translate-x-0 fixed lg:sticky top-[73px] left-0 z-30 w-64 h-[calc(100vh-73px)] bg-white border-r border-gray-200 transition-transform duration-300 ease-in-out overflow-y-auto`}>
+                {/* Desktop Sidebar (visible on lg and above) */}
+                <aside className="hidden lg:block w-64 h-[calc(100vh-73px)] bg-white border-r border-gray-200 sticky top-[73px] overflow-y-auto">
                     <nav className="p-4 space-y-1">
                         {menuItems.map(item => (
                             hasRole(item.roles) && (
                                 <button
                                     key={item.id}
-                                    onClick={() => {
-                                        setActiveTab(item.id);
-                                        if (window.innerWidth < 1024) {
-                                            setSidebarOpen(false);
-                                        }
-                                    }}
+                                    onClick={() => setActiveTab(item.id)}
                                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${activeTab === item.id
                                         ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-200'
                                         : 'text-gray-700 hover:bg-gray-100'
@@ -189,12 +193,48 @@ const AdminDashboard = () => {
                     </nav>
                 </aside>
 
-                {/* Overlay for mobile */}
+                {/* Mobile/Tablet Sidebar Drawer */}
                 {sidebarOpen && (
-                    <div
-                        className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-20 top-[73px]"
-                        onClick={() => setSidebarOpen(false)}
-                    ></div>
+                    <div className="lg:hidden fixed inset-0 z-50 flex">
+                        {/* Backdrop */}
+                        <div 
+                            className="fixed inset-0 bg-black bg-opacity-50 transition-opacity duration-300"
+                            onClick={() => setSidebarOpen(false)}
+                        ></div>
+                        
+                        {/* Drawer content */}
+                        <aside className="relative flex flex-col w-64 max-w-xs bg-white h-full shadow-2xl transition-transform duration-300 ease-in-out z-10 overflow-y-auto">
+                            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                                <span className="font-bold text-gray-900">Admin Menu</span>
+                                <button 
+                                    onClick={() => setSidebarOpen(false)} 
+                                    className="p-1 rounded-lg text-gray-500 hover:bg-gray-100 text-xl font-bold w-8 h-8 flex items-center justify-center border border-transparent hover:border-gray-200"
+                                >
+                                    &times;
+                                </button>
+                            </div>
+                            <nav className="p-4 space-y-1">
+                                {menuItems.map(item => (
+                                    hasRole(item.roles) && (
+                                        <button
+                                            key={item.id}
+                                            onClick={() => {
+                                                setActiveTab(item.id);
+                                                setSidebarOpen(false);
+                                            }}
+                                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${activeTab === item.id
+                                                ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg'
+                                                : 'text-gray-700 hover:bg-gray-100'
+                                                }`}
+                                        >
+                                            <span className="text-xl">{item.icon}</span>
+                                            <span className="flex-1 text-left">{item.label}</span>
+                                        </button>
+                                    )
+                                ))}
+                            </nav>
+                        </aside>
+                    </div>
                 )}
 
                 {/* Main Content */}

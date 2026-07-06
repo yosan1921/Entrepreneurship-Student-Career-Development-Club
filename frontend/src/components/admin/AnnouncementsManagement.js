@@ -380,7 +380,7 @@ const AnnouncementModal = ({ title, announcement, onClose, onSave }) => {
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm overflow-y-auto">
+        <div className="fixed inset-0 lg:left-64 lg:top-[73px] z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm overflow-y-auto">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl transform transition-all" onClick={(e) => e.stopPropagation()}>
                 {/* Modal Header */}
                 <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 rounded-t-2xl">

@@ -225,7 +225,7 @@ const UserModal = ({ user, onClose, onSave, submitting }) => {
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 lg:left-64 lg:top-[73px] z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all animate-in zoom-in-95 duration-200">
                 <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
                     <h3 className="text-lg font-bold text-gray-900">{user ? 'Edit User' : 'Add New User'}</h3>
