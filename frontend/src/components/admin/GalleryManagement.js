@@ -206,7 +206,7 @@ const GalleryManagement = () => {
             </div>
 
             {/* Statistics */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
                 {[
                     { label: 'Total Items', value: stats.total || 0, icon: '📊' },
                     { label: 'Active Items', value: stats.active || 0, icon: '✅' },
@@ -227,7 +227,7 @@ const GalleryManagement = () => {
             </div>
 
             {/* Filters Navigation Panel */}
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-slate-100 pb-4 mb-8">
+            <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 border-b border-slate-100 pb-4 mb-8">
                 {/* Horizontal Category Pill List */}
                 <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
                     {categories.map(cat => (
