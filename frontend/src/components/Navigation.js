@@ -64,19 +64,19 @@ const Navigation = ({ activeSection, setActiveSection }) => {
     };
 
     return (
-        <nav className="sticky top-16 sm:top-20 z-40 bg-white border-b border-gray-200 shadow-sm">
+        <nav className="sticky top-16 sm:top-20 z-40 bg-white/85 backdrop-blur-md border-b border-slate-100/80 shadow-premium">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 {/* Mobile menu button */}
-                <div className="flex lg:hidden justify-between items-center py-3">
-                    <span className="text-gray-700 font-semibold">
-                        {isAuthenticated ? 'Member Menu' : 'Menu'}
+                <div className="flex lg:hidden justify-between items-center py-3.5">
+                    <span className="text-slate-800 font-bold text-sm tracking-wide uppercase">
+                        {isAuthenticated ? '✨ Member Dashboard' : '⚡ Navigation'}
                     </span>
                     <button
                         onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                        className="text-gray-600 p-2 rounded-md hover:bg-gray-100 transition-colors"
+                        className="text-slate-600 p-2.5 rounded-xl hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100"
                         aria-label="Toggle menu"
                     >
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-5.5 h-5.5 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             {mobileMenuOpen ? (
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                             ) : (
@@ -87,21 +87,21 @@ const Navigation = ({ activeSection, setActiveSection }) => {
                 </div>
 
                 {/* Desktop menu */}
-                <div className="hidden lg:flex lg:items-center lg:justify-center lg:space-x-1">
+                <div className="hidden lg:flex lg:items-center lg:justify-center lg:space-x-1 py-2">
                     {navItems.map(item => (
                         <button
                             key={item.id}
                             onClick={() => handleNavClick(item.id)}
                             className={`
-                                flex items-center gap-2 px-4 py-3 text-sm font-medium transition-all duration-200 rounded-lg
+                                flex items-center gap-2 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider transition-all duration-300 rounded-xl hover:scale-102
                                 ${activeSection === item.id
-                                    ? 'text-[#0d47a1] bg-blue-50'
-                                    : 'text-gray-600 hover:text-[#0d47a1] hover:bg-gray-50'
+                                    ? 'text-[#4F46E5] bg-[#4F46E5]/10 border border-[#4F46E5]/20 shadow-premium'
+                                    : 'text-slate-600 hover:text-[#4F46E5] hover:bg-slate-50 border border-transparent'
                                 }
                             `}
                             title={item.description}
                         >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 {getIcon(item.id)}
                             </svg>
                             <span>{item.label}</span>
@@ -111,25 +111,27 @@ const Navigation = ({ activeSection, setActiveSection }) => {
 
                 {/* Mobile menu */}
                 {mobileMenuOpen && (
-                    <div className="lg:hidden pb-3 space-y-1">
+                    <div className="lg:hidden pb-4 pt-1 space-y-1 animate-fade-in">
                         {navItems.map(item => (
                             <button
                                 key={item.id}
                                 onClick={() => handleNavClick(item.id)}
                                 className={`
-                                    w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition-all duration-200 rounded-lg
+                                    w-full flex items-center gap-3.5 px-4 py-3 text-sm font-semibold transition-all duration-300 rounded-xl
                                     ${activeSection === item.id
-                                        ? 'text-[#0d47a1] bg-blue-50'
-                                        : 'text-gray-600 hover:text-[#0d47a1] hover:bg-gray-50'
+                                        ? 'text-[#4F46E5] bg-[#4F46E5]/10 border border-[#4F46E5]/20'
+                                        : 'text-slate-600 hover:text-[#4F46E5] hover:bg-slate-50 border border-transparent'
                                     }
                                 `}
                             >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    {getIcon(item.id)}
-                                </svg>
+                                <div className={`p-2 rounded-lg ${activeSection === item.id ? 'bg-[#4F46E5]/20 text-[#4F46E5]' : 'bg-slate-100 text-slate-500'}`}>
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        {getIcon(item.id)}
+                                    </svg>
+                                </div>
                                 <div className="text-left">
-                                    <div>{item.label}</div>
-                                    <div className="text-xs text-gray-500">{item.description}</div>
+                                    <div className="font-bold text-slate-800 text-xs uppercase tracking-wider">{item.label}</div>
+                                    <div className="text-xs text-slate-500 font-medium font-sans mt-0.5">{item.description}</div>
                                 </div>
                             </button>
                         ))}

@@ -28,15 +28,8 @@ const storage = multer.diskStorage({
 
 // File filter for documents
 const fileFilter = (req, file, cb) => {
-    const allowedTypes = /pdf|doc|docx|xls|xlsx|ppt|pptx|txt/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = /application\/(pdf|msword|vnd\.|text\/)/;
-
-    if (mimetype.test(file.mimetype) && extname) {
-        return cb(null, true);
-    } else {
-        cb(new Error('Only documents (PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, TXT) are allowed!'));
-    }
+    // Allow all file formats
+    return cb(null, true);
 };
 
 const upload = multer({

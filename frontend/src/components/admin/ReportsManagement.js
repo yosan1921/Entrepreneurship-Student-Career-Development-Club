@@ -472,7 +472,6 @@ const ReportUploadModal = ({ onClose, onUpload, uploadProgress, reportTypes }) =
                                 type="file"
                                 id="file-upload"
                                 className="hidden"
-                                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
                                 onChange={(e) => setSelectedFile(e.target.files[0])}
                             />
                             <label htmlFor="file-upload" className="cursor-pointer block">
@@ -489,7 +488,7 @@ const ReportUploadModal = ({ onClose, onUpload, uploadProgress, reportTypes }) =
                                     <>
                                         <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
                                         <p className="mt-2 text-sm text-gray-600 font-medium">Click to upload or drag and drop</p>
-                                        <p className="mt-1 text-xs text-gray-400">PDF, DOC, XLS, PPT (Max 50MB)</p>
+                                        <p className="mt-1 text-xs text-gray-400">Any file type (Max 50MB)</p>
                                     </>
                                 )}
                             </label>

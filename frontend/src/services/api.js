@@ -145,7 +145,7 @@ export const galleryAPI = {
         });
     },
     uploadMultiple: (formData, config) => {
-        return api.post('/gallery/upload-multiple', formData, {
+        return api.post('/gallery-test/upload-multiple', formData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },

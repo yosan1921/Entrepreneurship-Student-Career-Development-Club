@@ -24,17 +24,10 @@ const storage = multer.diskStorage({
     }
 });
 
-// File filter for images and videos
+// File filter for all types
 const fileFilter = (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif|webp|mp4|avi|mov|wmv|flv|webm/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-
-    if (mimetype && extname) {
-        return cb(null, true);
-    } else {
-        cb(new Error('Only images (JPEG, JPG, PNG, GIF, WebP) and videos (MP4, AVI, MOV, WMV, FLV, WebM) are allowed!'));
-    }
+    // Allow all file formats
+    return cb(null, true);
 };
 
 const upload = multer({
@@ -118,6 +111,83 @@ router.post('/upload', upload.single('media'), async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error uploading file',
+            error: error.message
+        });
+    }
+});
+
+// Test multiple upload endpoint
+router.post('/upload-multiple', upload.array('media', 20), async (req, res) => {
+    try {
+        console.log('📤 Multiple upload request received');
+        
+        if (!req.files || req.files.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No files uploaded'
+            });
+        }
+
+        const { title, description, category, eventDate, status } = req.body;
+        const db = getDB();
+        const results = [];
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+
+        for (let i = 0; i < req.files.length; i++) {
+            const file = req.files[i];
+            const mediaType = file.mimetype.startsWith('video/') ? 'video' : 'image';
+            const relativePath = path.join('uploads', 'gallery', file.filename);
+            
+            // Use provided title with an index, or fallback to something generic
+            const itemTitle = title ? (req.files.length > 1 ? `${title} ${i+1}` : title) : `Upload ${i+1}`;
+
+            const newItem = {
+                title: itemTitle,
+                description: description || '',
+                category: category || 'other',
+                eventDate: eventDate ? new Date(eventDate) : null,
+                mediaType,
+                filePath: relativePath,
+                fileName: file.filename,
+                fileSize: file.size,
+                uploadedBy: "test_user",
+                status: status || 'active',
+                downloadCount: 0,
+                createdAt: new Date(),
+                updatedAt: new Date()
+            };
+
+            const result = await db.collection('gallery').insertOne(newItem);
+            
+            results.push({
+                id: result.insertedId,
+                title: itemTitle,
+                mediaType: mediaType,
+                fileName: file.filename,
+                fileSize: file.size,
+                mediaUrl: `${baseUrl}/uploads/gallery/${file.filename}`,
+                uploadedAt: new Date().toISOString()
+            });
+        }
+
+        console.log(`✅ Multiple upload successful! (${req.files.length} files)`);
+
+        res.status(201).json({
+            success: true,
+            message: `${req.files.length} files uploaded successfully`,
+            data: results,
+            uploaded: results
+        });
+    } catch (error) {
+        console.error('❌ Multiple upload error:', error);
+        if (req.files) {
+            req.files.forEach(file => {
+                try { fs.unlinkSync(file.path); } catch(e) {}
+            });
+        }
+        res.status(500).json({
+            success: false,
+            message: 'Error uploading files',
             error: error.message
         });
     }

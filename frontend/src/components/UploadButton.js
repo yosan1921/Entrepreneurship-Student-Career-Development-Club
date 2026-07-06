@@ -64,7 +64,6 @@ const UploadButton = ({ onUploadSuccess, onUploadError, className = '', style = 
                 ref={fileInputRef}
                 type="file"
                 multiple
-                accept="image/*,video/*"
                 onChange={handleQuickUpload}
                 className="hidden"
                 id="quick-upload-input"
@@ -139,7 +138,7 @@ const AdvancedUploadModal = ({ onClose, onUpload, uploading, uploadProgress }) =
                         <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
                         <div className="text-4xl mb-2">📁</div>
                         <h4 className="font-bold text-gray-900">{selectedFiles.length > 0 ? `${selectedFiles.length} files selected` : 'Click or drag files here'}</h4>
-                        <p className="text-sm text-gray-500 mt-1">Images and Videos up to 100MB</p>
+                        <p className="text-sm text-gray-500 mt-1">Any file type up to 100MB</p>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">

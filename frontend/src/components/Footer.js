@@ -24,42 +24,39 @@ const Footer = () => {
                 }
             } catch (error) {
                 console.error('Error fetching social links:', error);
-                // Silently fail - keep default empty strings
             }
         };
 
         fetchSocialLinks();
-    }, []); // Only run once on mount
+    }, []);
 
     return (
-        <footer className="bg-gradient-to-br from-[#1e3a8a] via-[#1e40af] to-[#2563eb] text-white mt-auto">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-                {/* Main Footer Content */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
+        <footer className="bg-slate-950 text-slate-200 border-t border-slate-900 mt-auto font-sans text-sm">
+            <div className="max-w-7xl mx-auto px-6 py-16 sm:py-20 lg:px-8">
+                {/* Main Footer Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 pb-12 border-b border-slate-900">
                     {/* About Section */}
-                    <div>
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm border-2 border-white/30">
-                                <span className="text-lg font-bold">C</span>
+                    <div className="space-y-6">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/5 border border-white/10 flex items-center justify-center p-0.5 shadow-inner">
+                                <img src="/logo.png" alt="ESCDC Logo" className="w-full h-full object-cover" />
                             </div>
-                            <h3 className="text-xl font-bold">Community Hub</h3>
+                            <h3 className="text-lg font-bold tracking-tight text-white uppercase">ESCDC</h3>
                         </div>
-                        <p className="text-blue-100 text-sm leading-relaxed">
-                            Building Together, Growing Together. Empowering the next generation of leaders and entrepreneurs.
+                        <p className="text-slate-400 text-xs leading-relaxed max-w-xs">
+                            Building Together, Growing Together. Empowering Haramaya University students with career readiness and entrepreneurial capacity.
                         </p>
                     </div>
 
                     {/* Quick Links */}
-                    <div>
-                        <h4 className="text-lg font-semibold mb-4">Quick Links</h4>
-                        <ul className="space-y-2">
+                    <div className="space-y-6">
+                        <h4 className="text-xs font-bold text-white uppercase tracking-widest">Quick Links</h4>
+                        <ul className="space-y-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
                             {['About Us', 'Programs', 'Events', 'Resources'].map((link) => (
                                 <li key={link}>
-                                    <button className="text-blue-100 hover:text-white transition-colors text-sm flex items-center gap-2 group">
-                                        <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                        </svg>
-                                        {link}
+                                    <button className="hover:text-white transition-colors flex items-center gap-1.5 group">
+                                        <span className="group-hover:translate-x-0.5 transition-transform">→</span>
+                                        <span>{link}</span>
                                     </button>
                                 </li>
                             ))}
@@ -67,82 +64,61 @@ const Footer = () => {
                     </div>
 
                     {/* Contact Info */}
-                    <div>
-                        <h4 className="text-lg font-semibold mb-4">Contact Us</h4>
-                        <ul className="space-y-3 text-sm text-blue-100">
-                            <li className="flex items-start gap-2">
-                                <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                </svg>
-                                <span>Haramaya University</span>
+                    <div className="space-y-6">
+                        <h4 className="text-xs font-bold text-white uppercase tracking-widest">Contact Us</h4>
+                        <ul className="space-y-3.5 text-xs text-slate-400 font-medium">
+                            <li className="flex items-start gap-2.5">
+                                <span className="text-base shrink-0">📍</span>
+                                <span className="leading-relaxed">Haramaya University Main Campus, Building II, Office No. 12</span>
                             </li>
-                            <li className="flex items-start gap-2">
-                                <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                </svg>
-                                <span>info@escdc.edu</span>
+                            <li className="flex items-center gap-2.5">
+                                <span className="text-base shrink-0">📧</span>
+                                <a href="mailto:info@escdc.edu" className="hover:text-white transition-colors">info@escdc.edu</a>
                             </li>
-                            <li className="flex items-start gap-2">
-                                <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                                </svg>
+                            <li className="flex items-center gap-2.5">
+                                <span className="text-base shrink-0">📞</span>
                                 <span>+251 XXX XXX XXX</span>
                             </li>
                         </ul>
                     </div>
 
                     {/* Social Media */}
-                    <div>
-                        <h4 className="text-lg font-semibold mb-4">Follow Us</h4>
-                        <div className="flex gap-3">
+                    <div className="space-y-6">
+                        <h4 className="text-xs font-bold text-white uppercase tracking-widest">Follow Us</h4>
+                        <div className="flex gap-2.5">
                             {[
                                 { icon: 'M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z', label: 'Facebook', url: socialLinks.facebook_url },
                                 { icon: 'M23 3a10.9 10.9 0 01-3.14 1.53 4.48 4.48 0 00-7.86 3v1A10.66 10.66 0 013 4s-4 9 5 13a11.64 11.64 0 01-7 2c9 5 20 0 20-11.5a4.5 4.5 0 00-.08-.83A7.72 7.72 0 0023 3z', label: 'Twitter', url: socialLinks.twitter_url },
                                 { icon: 'M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z M4 6a2 2 0 100-4 2 2 0 000 4z', label: 'LinkedIn', url: socialLinks.linkedin_url }
                             ].map((social, index) => (
-                                social.url ? (
-                                    <a
-                                        key={index}
-                                        href={social.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="w-10 h-10 bg-white/10 hover:bg-white/20 rounded-lg flex items-center justify-center transition-all duration-300 hover:scale-110 backdrop-blur-sm"
-                                        aria-label={social.label}
-                                    >
-                                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                                            <path d={social.icon} />
-                                        </svg>
-                                    </a>
-                                ) : (
-                                    <button
-                                        key={index}
-                                        className="w-10 h-10 bg-white/10 hover:bg-white/20 rounded-lg flex items-center justify-center transition-all duration-300 hover:scale-110 backdrop-blur-sm"
-                                        aria-label={social.label}
-                                    >
-                                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                                            <path d={social.icon} />
-                                        </svg>
-                                    </button>
-                                )
+                                <a
+                                    key={index}
+                                    href={social.url || '#'}
+                                    target={social.url ? '_blank' : '_self'}
+                                    rel="noopener noreferrer"
+                                    className="w-10 h-10 bg-slate-900 border border-slate-800 hover:border-slate-700 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl flex items-center justify-center transition-all duration-300 hover:scale-105"
+                                    aria-label={social.label}
+                                >
+                                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d={social.icon} />
+                                    </svg>
+                                </a>
                             ))}
                         </div>
-                        <p className="text-blue-100 text-sm mt-4">
+                        <p className="text-slate-500 text-xs font-sans mt-3">
                             Stay connected with our community and get the latest updates.
                         </p>
                     </div>
                 </div>
 
-                {/* Bottom Bar */}
-                <div className="border-t border-white/20 pt-8">
-                    <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                        <p className="text-sm text-blue-100 text-center md:text-left">
-                            © {new Date().getFullYear()} Haramaya University – Entrepreneurship and Student Career Development Club. All rights reserved.
-                        </p>
-                        <div className="flex gap-6 text-sm text-blue-100">
-                            <button className="hover:text-white transition-colors">Privacy Policy</button>
-                            <button className="hover:text-white transition-colors">Terms of Service</button>
-                        </div>
+                {/* Bottom copyright block */}
+                <div className="pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs font-medium text-slate-500 font-sans">
+                    <p className="text-center md:text-left">
+                        © {new Date().getFullYear()} Haramaya University – Entrepreneurship and Student Career Development Club. All rights reserved.
+                    </p>
+                    <div className="flex gap-6 font-semibold uppercase tracking-wider text-[10px] text-slate-400">
+                        <button className="hover:text-white transition-colors">Privacy Policy</button>
+                        <button className="hover:text-white transition-colors">Terms of Service</button>
                     </div>
                 </div>
             </div>
