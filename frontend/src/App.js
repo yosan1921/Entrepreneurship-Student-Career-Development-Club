@@ -24,14 +24,16 @@ const AppContent = () => {
     const [activeSection, setActiveSection] = useState('home');
     const { isAuthenticated, loading } = useAuth();
 
-    // Redirect to home if user tries to access protected section without login
+    // Redirect to home only if the user is not authenticated AND trying to access a protected section,
+    // but NOT during the initial loading phase
     useEffect(() => {
-        // Only run redirect logic if we are not in loading state
         if (!loading && !isAuthenticated && PROTECTED_SECTIONS.includes(activeSection)) {
             console.log(`🛡️ Access denied to ${activeSection}. Redirecting home...`);
             setActiveSection('home');
         }
-    }, [isAuthenticated, activeSection, loading]);
+    }, [isAuthenticated, loading]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Note: activeSection intentionally omitted — we only want this to fire when auth state changes,
+    // not on every section change (which would block the post-login redirect to 'admin')
 
     const renderSection = () => {
         if (loading) {

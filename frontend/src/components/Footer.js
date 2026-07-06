@@ -24,11 +24,12 @@ const Footer = () => {
                 }
             } catch (error) {
                 console.error('Error fetching social links:', error);
+                // Silently fail - keep default empty strings
             }
         };
 
         fetchSocialLinks();
-    }, []);
+    }, []); // Only run once on mount
 
     return (
         <footer className="bg-gradient-to-br from-[#1e3a8a] via-[#1e40af] to-[#2563eb] text-white mt-auto">

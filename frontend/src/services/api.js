@@ -1,6 +1,11 @@
 import axios from 'axios';
 
 const getBaseURL = () => {
+    // In development, use relative URL so the proxy handles it
+    // In production, use the environment variable
+    if (process.env.NODE_ENV === 'development') {
+        return '/api';
+    }
     const envBaseURL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
     const cleanURL = envBaseURL.replace(/\/+$/, '');
     if (cleanURL.endsWith('/api')) return cleanURL;
@@ -37,12 +42,17 @@ api.interceptors.response.use(
     },
     (error) => {
         console.error(`❌ API Error: ${error.response?.status} ${error.config?.url}`, error.response?.data);
-        if (error.response?.status === 401) {
-            console.warn('🔄 401 Unauthorized detected. Notifying AuthContext.');
+
+        // Only dispatch auth-401 for authenticated requests (those that have a token)
+        // and only for non-auth endpoints to prevent infinite loops
+        const url = error.config?.url || '';
+        const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/profile');
+        const hasToken = !!localStorage.getItem('authToken');
+
+        if (error.response?.status === 401 && hasToken && !isAuthEndpoint) {
+            console.warn('🔄 401 Unauthorized on protected route. Clearing auth state.');
             localStorage.removeItem('authToken');
             localStorage.removeItem('user');
-
-            // Dispatch custom event to let AuthContext handle it gracefully
             window.dispatchEvent(new Event('auth-401'));
         }
         return Promise.reject(error);

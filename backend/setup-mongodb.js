@@ -52,9 +52,31 @@ async function setupDatabase() {
             console.log('ℹ️  Admin user already exists');
         }
 
+        // Seed default system settings if empty
+        console.log('\n📋 Seeding system settings...');
+        const settingsCount = await db.collection('system_settings').countDocuments();
+        if (settingsCount === 0) {
+            await db.collection('system_settings').insertMany([
+                { setting_key: 'club_name', setting_value: 'ESCDC', setting_type: 'text', category: 'club_info', description: 'Club name', is_public: true, created_at: new Date(), updated_at: new Date() },
+                { setting_key: 'club_description', setting_value: 'Entrepreneurship and Student Career Development Club', setting_type: 'text', category: 'club_info', description: 'Club description', is_public: true, created_at: new Date(), updated_at: new Date() },
+                { setting_key: 'club_email', setting_value: 'info@escdc.edu', setting_type: 'text', category: 'club_info', description: 'Club email', is_public: true, created_at: new Date(), updated_at: new Date() },
+                { setting_key: 'club_phone', setting_value: '', setting_type: 'text', category: 'club_info', description: 'Club phone', is_public: true, created_at: new Date(), updated_at: new Date() },
+                { setting_key: 'club_address', setting_value: 'Haramaya University', setting_type: 'text', category: 'club_info', description: 'Club address', is_public: true, created_at: new Date(), updated_at: new Date() },
+                { setting_key: 'club_logo', setting_value: '', setting_type: 'text', category: 'club_info', description: 'Club logo path', is_public: true, created_at: new Date(), updated_at: new Date() },
+                { setting_key: 'facebook_url', setting_value: '', setting_type: 'text', category: 'club_info', description: 'Facebook URL', is_public: true, created_at: new Date(), updated_at: new Date() },
+                { setting_key: 'instagram_url', setting_value: '', setting_type: 'text', category: 'club_info', description: 'Instagram URL', is_public: true, created_at: new Date(), updated_at: new Date() },
+                { setting_key: 'linkedin_url', setting_value: '', setting_type: 'text', category: 'club_info', description: 'LinkedIn URL', is_public: true, created_at: new Date(), updated_at: new Date() },
+                { setting_key: 'twitter_url', setting_value: '', setting_type: 'text', category: 'club_info', description: 'Twitter URL', is_public: true, created_at: new Date(), updated_at: new Date() },
+                { setting_key: 'maintenance_mode', setting_value: 'false', setting_type: 'boolean', category: 'system', description: 'Maintenance mode', is_public: false, created_at: new Date(), updated_at: new Date() },
+                { setting_key: 'registration_open', setting_value: 'true', setting_type: 'boolean', category: 'system', description: 'Allow new registrations', is_public: false, created_at: new Date(), updated_at: new Date() },
+            ]);
+            console.log('✅ Default system settings seeded');
+        } else {
+            console.log(`ℹ️  System settings already exist (${settingsCount} records)`);
+        }
+
         // Create indexes
         console.log('\n📋 Creating indexes...');
-
         // Members indexes
         await db.collection('members').createIndex({ email: 1 }, { unique: true });
         await db.collection('members').createIndex({ status: 1 });

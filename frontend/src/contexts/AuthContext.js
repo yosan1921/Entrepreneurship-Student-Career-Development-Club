@@ -49,10 +49,18 @@ export const AuthProvider = ({ children }) => {
             }
         } catch (error) {
             console.error('❌ Auth check failed:', error.response?.status, error.message);
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('user');
-            setUser(null);
-            setIsAuthenticated(false);
+            // Only clear token on 401 (expired/invalid), not on network errors
+            if (error.response?.status === 401 || error.response?.status === 403) {
+                localStorage.removeItem('authToken');
+                localStorage.removeItem('user');
+                setUser(null);
+                setIsAuthenticated(false);
+            }
+            // For other errors (500, network) keep the token and just set not-authenticated
+            else {
+                setUser(null);
+                setIsAuthenticated(false);
+            }
         } finally {
             setLoading(false);
         }
@@ -75,12 +83,17 @@ export const AuthProvider = ({ children }) => {
                 console.log('✅ Auth state updated: Authenticated');
 
                 return { success: true, user };
+            } else {
+                return {
+                    success: false,
+                    message: response.data.message || 'Login failed'
+                };
             }
         } catch (error) {
             console.error('❌ Login failed:', error.response?.status, error.message);
             return {
                 success: false,
-                message: error.response?.data?.message || 'Login failed'
+                message: error.response?.data?.message || 'Login failed. Please check your credentials.'
             };
         }
     };
