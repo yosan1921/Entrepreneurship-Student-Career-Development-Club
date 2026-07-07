@@ -92,15 +92,15 @@ const JoinClub = () => {
 
     return (
         <div>
-            {/* Redesigned Premium "Join Club" Button */}
+            {/* Redesigned Premium "Join Club" Button - Minimized */}
             <button
-                className="group relative inline-flex items-center justify-center px-8 py-3.5 font-bold text-white transition-all duration-300 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full hover:from-blue-700 hover:to-indigo-700 hover:shadow-xl hover:-translate-y-0.5 active:scale-95 overflow-hidden"
+                className="group relative inline-flex items-center justify-center px-4 py-2 text-xs sm:text-sm font-bold text-white transition-all duration-300 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl hover:from-blue-700 hover:to-indigo-700 hover:shadow-lg hover:-translate-y-0.5 active:scale-95 overflow-hidden"
                 onClick={() => setShowModal(true)}
             >
                 <div className="absolute inset-0 w-3 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -skew-x-12 -translate-x-40 group-hover:translate-x-40 transition-all duration-700 ease-out"></div>
-                <span className="relative flex items-center gap-2">
+                <span className="relative flex items-center gap-1.5">
                     Join Our Community
-                    <svg className="w-5 h-5 transition-transform duration-300 group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
                 </span>

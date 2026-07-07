@@ -5,11 +5,11 @@ const AuthContext = createContext();
 
 export const useAuth = () => {
     const context = useContext(AuthContext);
-    if (!context) {
-        throw new Error('useAuth must be used within an AuthProvider');
-    }
+    if (!context) throw new Error('useAuth must be used within an AuthProvider');
     return context;
 };
+
+const ADMIN_ROLES = ['super_admin', 'admin', 'editor'];
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
@@ -19,9 +19,7 @@ export const AuthProvider = ({ children }) => {
     useEffect(() => {
         checkAuthStatus();
 
-        // Listen for 401 events from the API interceptor
         const handleAuthError = () => {
-            console.warn('⚠️ Received auth-401 event. Resetting auth state.');
             localStorage.removeItem('authToken');
             localStorage.removeItem('user');
             setUser(null);
@@ -35,29 +33,20 @@ export const AuthProvider = ({ children }) => {
     const checkAuthStatus = async () => {
         try {
             const token = localStorage.getItem('authToken');
-            console.log('🔍 Checking auth status...', token ? 'Token found' : 'No token');
-            if (!token) {
-                setLoading(false);
-                return;
-            }
+            if (!token) { setLoading(false); return; }
 
             const response = await authAPI.getProfile();
-            console.log('👤 Auth Profile Response:', response.data);
             if (response.data.success) {
                 setUser(response.data.user);
                 setIsAuthenticated(true);
             }
         } catch (error) {
-            console.error('❌ Auth check failed:', error.response?.status, error.message);
-            // Only clear token on 401 (expired/invalid), not on network errors
             if (error.response?.status === 401 || error.response?.status === 403) {
                 localStorage.removeItem('authToken');
                 localStorage.removeItem('user');
                 setUser(null);
                 setIsAuthenticated(false);
-            }
-            // For other errors (500, network) keep the token and just set not-authenticated
-            else {
+            } else {
                 setUser(null);
                 setIsAuthenticated(false);
             }
@@ -66,31 +55,24 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    // Admin login (super_admin, admin, editor)
     const login = async (credentials) => {
         try {
-            console.log('🔑 Attempting login for:', credentials.username);
             const response = await authAPI.login(credentials);
-            console.log('📥 Login Response:', response.data);
-
             if (response.data.success) {
                 const { token, user } = response.data;
-
+                // Reject if not an admin role
+                if (!ADMIN_ROLES.includes(user.role)) {
+                    return { success: false, message: 'Access denied. Not an admin account.' };
+                }
                 localStorage.setItem('authToken', token);
                 localStorage.setItem('user', JSON.stringify(user));
-
                 setUser(user);
                 setIsAuthenticated(true);
-                console.log('✅ Auth state updated: Authenticated');
-
                 return { success: true, user };
-            } else {
-                return {
-                    success: false,
-                    message: response.data.message || 'Login failed'
-                };
             }
+            return { success: false, message: response.data.message || 'Login failed' };
         } catch (error) {
-            console.error('❌ Login failed:', error.response?.status, error.message);
             return {
                 success: false,
                 message: error.response?.data?.message || 'Login failed. Please check your credentials.'
@@ -98,49 +80,71 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const logout = async () => {
+    // Member/user login
+    const userLogin = async (credentials) => {
         try {
-            await authAPI.logout();
+            const response = await authAPI.userLogin(credentials);
+            if (response.data.success) {
+                const { token, user } = response.data;
+                localStorage.setItem('authToken', token);
+                localStorage.setItem('user', JSON.stringify(user));
+                setUser(user);
+                setIsAuthenticated(true);
+                return { success: true, user };
+            }
+            return { success: false, message: response.data.message || 'Login failed' };
         } catch (error) {
-            console.error('Logout error:', error);
-        } finally {
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('user');
-            setUser(null);
-            setIsAuthenticated(false);
+            return {
+                success: false,
+                message: error.response?.data?.message || 'Login failed. Please check your credentials.'
+            };
         }
     };
 
-    const hasRole = (roles) => {
-        if (!user) return false;
-        return roles.includes(user.role);
+    // User registration
+    const register = async (data) => {
+        try {
+            const response = await authAPI.register(data);
+            return { success: response.data.success, message: response.data.message };
+        } catch (error) {
+            return {
+                success: false,
+                message: error.response?.data?.message || 'Registration failed. Please try again.'
+            };
+        }
     };
+
+    const logout = async () => {
+        try { await authAPI.logout(); } catch (_) { }
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('user');
+        setUser(null);
+        setIsAuthenticated(false);
+    };
+
+    // Role helpers
+    const hasRole = (roles) => user ? roles.includes(user.role) : false;
+    const isAdmin = () => user ? ADMIN_ROLES.includes(user.role) : false;
+    const isMember = () => user?.role === 'member';
 
     const hasPermission = (permission) => {
         if (!user) return false;
-
         const permissions = {
             super_admin: ['read', 'write', 'delete', 'manage_users', 'manage_system'],
             admin: ['read', 'write', 'delete', 'manage_content'],
-            editor: ['read', 'write']
+            editor: ['read', 'write'],
+            member: ['read']
         };
-
         return permissions[user.role]?.includes(permission) || false;
     };
 
-    const value = {
-        user,
-        loading,
-        isAuthenticated,
-        login,
-        logout,
-        hasRole,
-        hasPermission,
-        checkAuthStatus
-    };
-
     return (
-        <AuthContext.Provider value={value}>
+        <AuthContext.Provider value={{
+            user, loading, isAuthenticated,
+            login, userLogin, register, logout,
+            hasRole, isAdmin, isMember, hasPermission,
+            checkAuthStatus
+        }}>
             {children}
         </AuthContext.Provider>
     );

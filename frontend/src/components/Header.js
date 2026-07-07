@@ -1,27 +1,24 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import Login from './Login';
-import JoinClub from './JoinClub';
+import LoginModal from './auth/LoginModal';
+import RegisterModal from './auth/RegisterModal';
 
 const Header = ({ setActiveSection }) => {
     const [showLogin, setShowLogin] = useState(false);
-    const { user, isAuthenticated, logout } = useAuth();
+    const [showRegister, setShowRegister] = useState(false);
+    const { user, isAuthenticated, logout, isAdmin } = useAuth();
 
     const handleLoginSuccess = (user, targetSection = 'home') => {
-        console.log('Login successful:', user);
-        // Redirect to the appropriate section based on user role
-        if (setActiveSection && targetSection) {
-            setActiveSection(targetSection);
-        }
+        setActiveSection && setActiveSection(targetSection);
     };
 
     const handleLogout = () => {
         logout();
-        // Redirect to home after logout
-        if (setActiveSection) {
-            setActiveSection('home');
-        }
+        setActiveSection && setActiveSection('home');
     };
+
+    const openRegister = () => { setShowLogin(false); setShowRegister(true); };
+    const openLogin = () => { setShowRegister(false); setShowLogin(true); };
 
     return (
         <>
@@ -48,10 +45,19 @@ const Header = ({ setActiveSection }) => {
                             {isAuthenticated ? (
                                 <>
                                     <span className="hidden md:inline-block text-xs sm:text-sm font-semibold tracking-wider uppercase text-amber-400 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20">
-                                        Hi, {user?.firstName}
+                                        Hi, {user?.firstName || user?.full_name?.split(' ')[0]}
                                     </span>
+                                    {isAdmin() && (
+                                        <button
+                                            onClick={() => setActiveSection('admin')}
+                                            className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-purple-300 hover:text-white bg-purple-800/30 hover:bg-purple-700/40 border border-purple-700/40 rounded-xl transition-all"
+                                        >
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                                            Admin
+                                        </button>
+                                    )}
                                     <button
-                                        className="flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700/80 border border-slate-700/50 rounded-xl transition-all duration-300 hover:scale-102"
+                                        className="flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700/80 border border-slate-700/50 rounded-xl transition-all duration-300"
                                         onClick={handleLogout}
                                     >
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -63,7 +69,7 @@ const Header = ({ setActiveSection }) => {
                             ) : (
                                 <>
                                     <button
-                                        className="flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold text-slate-200 hover:text-white bg-slate-800/50 hover:bg-slate-800 border border-slate-700/60 rounded-xl transition-all duration-300 hover:scale-102"
+                                        className="flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold text-slate-200 hover:text-white bg-slate-800/50 hover:bg-slate-800 border border-slate-700/60 rounded-xl transition-all duration-300"
                                         onClick={() => setShowLogin(true)}
                                     >
                                         <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -71,7 +77,6 @@ const Header = ({ setActiveSection }) => {
                                         </svg>
                                         <span>Login</span>
                                     </button>
-                                    <JoinClub />
                                 </>
                             )}
                         </div>
@@ -80,9 +85,16 @@ const Header = ({ setActiveSection }) => {
             </header>
 
             {showLogin && (
-                <Login
+                <LoginModal
                     onClose={() => setShowLogin(false)}
                     onSuccess={handleLoginSuccess}
+                    onRegister={openRegister}
+                />
+            )}
+            {showRegister && (
+                <RegisterModal
+                    onClose={() => setShowRegister(false)}
+                    onLoginClick={openLogin}
                 />
             )}
         </>

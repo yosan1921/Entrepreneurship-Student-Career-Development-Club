@@ -14,57 +14,60 @@ import EventGallery from './components/EventGallery';
 import Contact from './components/Contact';
 import Announcements from './components/Announcements';
 import AdminDashboard from './components/AdminDashboard';
+import UserDashboard from './components/UserDashboard';
+import AccessDenied from './components/auth/AccessDenied';
 import Footer from './components/Footer';
 
-
-// Protected sections that require login
-const PROTECTED_SECTIONS = ['events', 'gallery', 'event-gallery', 'resources', 'contact', 'announcements', 'admin'];
+// Sections that require ANY login
+const PROTECTED_SECTIONS = ['events', 'gallery', 'event-gallery', 'resources', 'contact', 'announcements', 'admin', 'user-dashboard'];
+// Sections that require an admin role specifically
+const ADMIN_ONLY_SECTIONS = ['admin'];
 
 const AppContent = () => {
     const [activeSection, setActiveSection] = useState('home');
-    const { isAuthenticated, loading } = useAuth();
+    const { isAuthenticated, loading, isAdmin, isMember } = useAuth();
 
-    // Redirect to home only if the user is not authenticated AND trying to access a protected section,
-    // but NOT during the initial loading phase
     useEffect(() => {
         if (!loading && !isAuthenticated && PROTECTED_SECTIONS.includes(activeSection)) {
-            console.log(`🛡️ Access denied to ${activeSection}. Redirecting home...`);
             setActiveSection('home');
         }
     }, [isAuthenticated, loading]); // eslint-disable-line react-hooks/exhaustive-deps
-    // Note: activeSection intentionally omitted — we only want this to fire when auth state changes,
-    // not on every section change (which would block the post-login redirect to 'admin')
 
     const renderSection = () => {
         if (loading) {
             return (
                 <div className="flex items-center justify-center min-h-[60vh]">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
                 </div>
             );
         }
 
-        // Check if section is protected and user is not authenticated
+        // Not authenticated — block protected sections
         if (PROTECTED_SECTIONS.includes(activeSection) && !isAuthenticated) {
             return (
-                <div className="max-w-4xl mx-auto px-4 py-16 text-center">
-                    <div className="bg-white rounded-lg shadow-lg p-8">
-                        <svg className="w-16 h-16 mx-auto text-blue-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                        </svg>
+                <div className="max-w-md mx-auto px-4 py-20 text-center">
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-10">
+                        <div className="w-16 h-16 rounded-full bg-indigo-50 flex items-center justify-center mx-auto mb-5">
+                            <svg className="w-8 h-8 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                        </div>
                         <h2 className="text-2xl font-bold text-gray-900 mb-2">Login Required</h2>
-                        <p className="text-gray-600 mb-6">
-                            Please login to access this section. This content is only available to registered members.
-                        </p>
+                        <p className="text-gray-500 text-sm mb-6">Please log in to access this section.</p>
                         <button
                             onClick={() => setActiveSection('home')}
-                            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                            className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-semibold text-sm hover:bg-indigo-700 transition-colors"
                         >
                             Return to Home
                         </button>
                     </div>
                 </div>
             );
+        }
+
+        // Admin-only section accessed by a regular member → Access Denied
+        if (ADMIN_ONLY_SECTIONS.includes(activeSection) && isAuthenticated && !isAdmin()) {
+            return <AccessDenied setActiveSection={setActiveSection} />;
         }
 
         switch (activeSection) {
@@ -80,21 +83,24 @@ const AppContent = () => {
             case 'announcements': return <Announcements />;
             case 'contact': return <Contact />;
             case 'admin': return <AdminDashboard setActiveSection={setActiveSection} />;
+            case 'user-dashboard': return <UserDashboard setActiveSection={setActiveSection} />;
             default: return <Home setActiveSection={setActiveSection} />;
         }
     };
 
+    const hideChrome = activeSection === 'admin';
+
     return (
         <div className="min-h-screen flex flex-col bg-gray-50">
-            {activeSection !== 'admin' && <Header activeSection={activeSection} setActiveSection={setActiveSection} />}
-            {activeSection !== 'admin' && <Navigation activeSection={activeSection} setActiveSection={setActiveSection} />}
+            {!hideChrome && <Header activeSection={activeSection} setActiveSection={setActiveSection} />}
+            {!hideChrome && <Navigation activeSection={activeSection} setActiveSection={setActiveSection} />}
             <main className="flex-1">
                 {renderSection()}
             </main>
-            {activeSection !== 'admin' && <Footer />}
+            {!hideChrome && <Footer />}
         </div>
     );
-}
+};
 
 function App() {
     return (
