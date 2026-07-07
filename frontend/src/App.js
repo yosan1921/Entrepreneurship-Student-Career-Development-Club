@@ -25,7 +25,7 @@ const ADMIN_ONLY_SECTIONS = ['admin'];
 
 const AppContent = () => {
     const [activeSection, setActiveSection] = useState('home');
-    const { isAuthenticated, loading, isAdmin, isMember } = useAuth();
+    const { isAuthenticated, loading, isAdmin } = useAuth();
 
     useEffect(() => {
         if (!loading && !isAuthenticated && PROTECTED_SECTIONS.includes(activeSection)) {

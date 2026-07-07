@@ -1,18 +1,6 @@
 import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
-const StatCard = ({ icon, label, value, color }) => (
-    <div className={`bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-center gap-4`}>
-        <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${color}`}>
-            {icon}
-        </div>
-        <div>
-            <p className="text-xs font-medium text-gray-500">{label}</p>
-            <p className="text-xl font-bold text-gray-900">{value}</p>
-        </div>
-    </div>
-);
-
 const QuickLink = ({ icon, label, description, onClick, color }) => (
     <button
         onClick={onClick}
